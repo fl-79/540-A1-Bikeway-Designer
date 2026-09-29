@@ -1,0 +1,8 @@
+{
+ "2383": {
+  "1": {"type": "continue", "v": "continue", "note": "satellite: Burrard St is one continuous street here (Elhu Lane joins mid-block); the City centreline has a 33 m gap"}
+ },
+ "4911": {
+  "1": {"type": "dead", "loop": false, "v": "dead", "note": "satellite: Heatley Av ends at the rail yard fence; the piece 35 m on is a port yard road"}
+ }
+}

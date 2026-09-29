@@ -1,0 +1,10 @@
+# intermediate data, not needed to run or rebuild the tool
+data/*.bak*
+data/raw/data_before_merge.json
+# Python caches
+__pycache__/
+*.pyc
+# editor and OS clutter
+.DS_Store
+Thumbs.db
+desktop.ini

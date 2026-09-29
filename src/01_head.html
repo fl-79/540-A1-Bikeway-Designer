@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vancouver Bikeway Designer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#F7F8FA; --panel:#FFFFFF; --line:#E4E7EC; --line2:#CFD4DC; --ink:#0F172A; --ink2:#475467; --ink3:#98A2B3;
+  --accent:#0F766E; --accent2:#14B8A6; --green:#16A34A; --amber:#D97706; --red:#DC2626; --blue:#2563EB;
+  --mono:'JetBrains Mono',ui-monospace,monospace; --sans:'Inter',system-ui,-apple-system,Segoe UI,sans-serif;
+  --r:10px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
+}
+:root:not([data-theme="light"]){color-scheme:light}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:13px;line-height:1.45;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line2);background:#fff;border-radius:8px;padding:6px 10px;transition:.12s}
+button:hover{border-color:var(--ink3)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{background:#0B5F58}
+button.ghost{border-color:transparent;background:transparent;color:var(--ink2)}
+button.ghost:hover{background:#EEF2F6}
+button.chip{border-radius:999px;padding:5px 12px;font-weight:500;font-size:12px}
+button.chip.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+button.chip.custom{border-style:dashed}
+input[type=text],input[type=number],select{border:1px solid var(--line2);border-radius:8px;padding:6px 9px;background:#fff;outline:none}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(20,184,166,.15)}
+.mono{font-family:var(--mono)}
+.muted{color:var(--ink2)}
+.small{font-size:11.5px}
+.label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+.row{display:flex;align-items:center;gap:8px}
+.grow{flex:1}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#EEF2F6;color:var(--ink2)}
+.tag.ok{background:#DCFCE7;color:#166534}.tag.warn{background:#FEF3C7;color:#92400E}.tag.err{background:#FEE2E2;color:#991B1B}.tag.info{background:#DBEAFE;color:#1E40AF}
+#app{height:100vh;display:flex;flex-direction:column}
+header{height:54px;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--panel);border-bottom:1px solid var(--line);z-index:5}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700}
+header h1{font-size:14px;font-weight:600}
+header .sub{font-size:11.5px;color:var(--ink2)}
+.search{position:relative;width:340px}
+.search input{width:100%;padding-left:32px}
+.search svg{position:absolute;left:10px;top:9px;width:14px;height:14px;color:var(--ink3)}
+.search .ac{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--line2);border-radius:8px;margin-top:4px;box-shadow:var(--shadow);max-height:260px;overflow:auto;display:none;z-index:20}
+.search .ac.show{display:block}
+.ac div{padding:7px 10px;cursor:pointer;display:flex;justify-content:space-between}
+.ac div:hover,.ac div.sel{background:#F1F5F9}
+.ac span{color:var(--ink3);font-size:11px}
+/* map screen */
+#screen-map{flex:1;position:relative;display:none}
+#screen-map.active{display:block}
+#map{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;background:#ECEEF1}   /* explicit 100%: an absolutely positioned canvas otherwise keeps its intrinsic size */
+.legend{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.72);backdrop-filter:blur(6px);border:1px solid rgba(228,231,236,.8);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--ink2);opacity:.85;transition:.15s}
+.legend:hover{opacity:1;background:rgba(255,255,255,.95)}
+.legend .label{margin-bottom:4px;font-size:10px}
+.legend .item{display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px}
+.legend .sw{width:22px;height:0;border-top:3px solid #16A34A}
+.card{position:absolute;right:16px;top:16px;width:340px;background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px;display:none}
+.card.show{display:block}
+.card h3{font-size:15px;font-weight:600;margin-bottom:2px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:10px 0}
+.kv div b{display:block;font-size:10.5px;color:var(--ink3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.kv div span{font-family:var(--mono);font-size:12px}
+.hint{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(15,23,42,.85);color:#fff;padding:6px 12px;border-radius:999px;font-size:12px;pointer-events:none}
+.mapzoom{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:4px}
+.mapzoom button{width:32px;height:32px;padding:0;font-size:16px;background:rgba(255,255,255,.95)}
+.maphelp{position:absolute;right:16px;bottom:16px;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--ink2)}
+.maptip{position:absolute;display:none;max-width:280px;background:rgba(15,23,42,.92);color:#fff;padding:7px 10px;border-radius:8px;font-size:11.5px;line-height:1.35;pointer-events:none;z-index:6;box-shadow:var(--shadow)}
+.maptip.show{display:block}
+.maptip b{display:block;font-weight:600;margin-bottom:2px}
+.card .why{background:#F1F5F9;color:var(--ink2);border-radius:8px;padding:8px 10px;font-size:12px;margin-top:6px}
+/* v2: design case (new · upgrade · make permanent · review · off-street) */
+.case{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:#E2E8F0;color:#334155;vertical-align:middle}
+.case.new{background:#DCFCE7;color:#166534}.case.upgrade{background:#FEF3C7;color:#92400E}.case.permanent{background:#DBEAFE;color:#1E40AF}.case.review{background:#EDE9FE;color:#5B21B6}.case.offstreet{background:#E2E8F0;color:#475569}
+#c-case{margin:8px 0 4px}#c-case .casewhy{margin-top:5px;color:var(--ink2);font-size:12px;line-height:1.4}#c-case small{color:#64748B}
+#d-tag .case{margin-right:6px}
+#d-tag{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card button.primary:disabled{background:#CBD5E1;border-color:#CBD5E1;color:#475467;cursor:not-allowed}
+.ac div.off{color:var(--ink3)}
+.ac div.off span{color:#B42318}
+/* design screen */
+#screen-design{flex:1;display:none;flex-direction:column;min-height:0}
+#screen-design.active{display:flex}
+.topbar{height:48px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .title{font-weight:600}
+.tabs{display:flex;background:#EEF2F6;border-radius:9px;padding:3px}
+.tabs button{border:none;background:transparent;padding:5px 12px;border-radius:7px;font-weight:500;color:var(--ink2)}
+.tabs button.active{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
+.toggle{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink2);cursor:pointer;user-select:none}
+.toggle i{width:30px;height:17px;border-radius:999px;background:#CBD5E1;position:relative;transition:.15s}
+.toggle i::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:.15s}
+.toggle.on i{background:var(--accent)}.toggle.on i::after{left:15px}
+.body{flex:1;display:flex;flex-direction:column;min-height:0}
+.viewport{flex:1;position:relative;background:#FBFBFA;min-width:0;min-height:0}
+.viewport canvas{position:absolute;inset:0;width:100%;height:100%}
+.split{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr}
+.split .pane{position:relative;overflow:hidden}
+.split .pane+.pane{border-left:1px solid var(--line2)}
+.badge{position:absolute;top:12px;left:12px;font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:6px;color:#fff;z-index:2}
+.badge.before{background:#7F1D1D}.badge.after{background:#065F46}
+.vhint{position:absolute;right:12px;bottom:10px;font-size:11px;color:var(--ink3);pointer-events:none;z-index:2}
+.bottom{height:310px;background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column;transition:height .2s;flex-shrink:0}
+.bottom.collapsed{height:38px}
+.bottom .bhead{height:38px;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line);flex-shrink:0}
+.bottom .bcols{flex:1;display:grid;grid-template-columns:1.1fr 1fr 1.3fr 1.4fr;min-height:0;overflow:hidden}
+.bottom.collapsed .bcols{display:none}
+.sec{padding:12px 14px;border-right:1px solid var(--line);overflow:auto;min-height:0}
+.sec:last-child{border-right:none}
+.sec h4{font-size:12px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--panel);padding-bottom:4px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+.form label{display:block;font-size:11px;color:var(--ink2);margin-bottom:3px}
+.form input,.form select{width:100%}
+.editor .erow{display:grid;grid-template-columns:22px 1fr 64px 62px;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--line)}
+.editor .erow:last-child{border-bottom:none}
+.editor .sw{width:14px;height:14px;border-radius:4px}
+.editor .name{font-size:12px}
+.editor .name small{display:block;color:var(--ink3);font-size:10.5px}
+.editor input[type=range]{width:100%;accent-color:var(--accent)}
+.editor input[type=number]{width:62px;padding:4px 6px;font-family:var(--mono);font-size:12px}
+.editor .locked{opacity:.55}
+.bar{height:8px;border-radius:999px;background:#EEF2F6;overflow:hidden;display:flex;margin:8px 0 4px}
+.bar i{display:block;height:100%}
+/* v2: design steps, the clickable element strip, the element properties (panel and floating popover) */
+.steps{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 4px;font-size:11px;color:var(--ink2)}
+.steps span{display:inline-flex;align-items:center;gap:4px;padding:2px 7px 2px 3px;border:1px solid var(--line);border-radius:999px;cursor:help;background:#fff}
+.steps span b{width:14px;height:14px;border-radius:50%;background:var(--ink);color:#fff;font-size:9px;display:inline-flex;align-items:center;justify-content:center}
+#ed-hint{margin-bottom:2px}
+.strip{display:flex;height:36px;border-radius:8px;overflow:hidden;border:1px solid var(--line2);margin:6px 0 8px}
+.strip div{display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-width:0;font-size:10px;line-height:1.15;color:#fff;border-right:1px solid rgba(255,255,255,.55);padding:0 2px}
+.strip div:last-child{border-right:none}
+.strip div span,.strip div small{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:100%;font-family:var(--mono)}
+.strip div span{font-family:var(--sans,Inter)}
+.strip div.sel{outline:3px solid var(--accent);outline-offset:-3px}
+.strip div.lock{cursor:default;opacity:.8}
+.strip .k-sw{background:#D9D6CF;color:#475467}.strip .k-bike{background:#3FB06E}.strip .k-buf{background:#B7C4CC;color:#1E293B}.strip .k-park{background:#7C8DA0}.strip .k-travel{background:#5F7A9A}
+.props{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff}
+.props .ph{display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px}
+.props .swatch{width:12px;height:12px;border-radius:3px;flex:none}
+.props .prow{display:flex;align-items:center;gap:6px;font-size:12px;margin:5px 0}
+.props .prow label{width:76px;flex:none;color:var(--ink2);font-size:11px}
+.props input[type=number]{width:72px;padding:4px 6px;font-family:var(--mono);font-size:12px}
+.props select{flex:1;min-width:0;padding:4px 6px;font-size:12px}
+.props .acts{flex-wrap:wrap;gap:5px}.props .acts button{font-size:11px;padding:3px 8px}
+.props button.danger{color:var(--red);border-color:#FECACA}
+.pop{position:absolute;z-index:5;width:310px;box-shadow:var(--shadow);display:none;background:rgba(255,255,255,.98)}
+.pop.show{display:block}
+.inl{position:absolute;z-index:7;display:none;font-family:var(--mono);font-size:12px;padding:3px 6px;border:1.5px solid var(--accent);border-radius:6px;background:#fff;box-shadow:var(--shadow);text-align:center;outline:none}
+.msg{display:flex;gap:8px;padding:8px 10px;border-radius:8px;font-size:12px;margin:6px 0;align-items:flex-start}
+.msg.err{background:#FEF2F2;color:#991B1B}.msg.warn{background:#FFFBEB;color:#92400E}.msg.info{background:#EFF6FF;color:#1E40AF}.msg.ok{background:#F0FDF4;color:#166534}
+.msg b{font-weight:600}
+.status{font-size:12px;font-weight:600}
+.opts{display:flex;flex-wrap:wrap;gap:6px}
+.prosCons p{font-size:12px;margin:3px 0;padding-left:14px;position:relative}
+.prosCons p.pro::before{content:'+';position:absolute;left:0;color:var(--green);font-weight:700}
+.prosCons p.con::before{content:'−';position:absolute;left:0;color:var(--red);font-weight:700}
+.empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink3)}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#D0D5DD;border-radius:8px}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="logo">B</div>
+  <div><h1>Vancouver Bikeway Designer</h1><div class="sub">Existing network from CoV Open Data · design rules from the Engineering Design Manual 2026 &amp; Rapid Implementation Guide</div></div>
+  <div class="grow"></div>
+  <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Search a block, e.g. 1000 Hornby St" autocomplete="off"><div class="ac" id="ac"></div></div>
+  <button class="ghost" id="btn-back" style="display:none">← Map</button>
+</header>
+
+<div id="screen-map" class="active">
+  <canvas id="map"></canvas>
+  <div class="hint">Click a street block to design a bike lane · click an existing bikeway for its details</div>
+  <div class="legend">
+    <div class="label">Existing bikeways</div>
+    <div class="item"><span class="sw" style="border-top:4px solid #15803D"></span>Protected bike lane · AAA</div>
+    <div class="item"><span class="sw" style="border-top:4px solid #22C55E"></span>Protected bike lane</div>
+    <div class="item"><span class="sw" style="border-top:3px dashed #16A34A"></span>Painted lane</div>
+    <div class="item"><span class="sw" style="border-top:3px solid #86EFAC"></span>Local street bikeway</div>
+    <div class="item"><span class="sw" style="border-top:3px dotted #4D7C0F"></span>Shared lane</div>
+    <div class="item" style="margin-top:8px"><span class="sw" style="border-top:2px solid #C4C9D1"></span>Street (no facility)</div>
+    <div class="item"><span class="sw" style="border-top:4px solid #F59E0B"></span>Selected block</div>
+  </div>
+  <div class="maphelp">Scroll or double-click to zoom · Drag to pan</div>
+  <div class="maptip" id="maptip"></div>
+  <div class="mapzoom"><button id="mz-in">+</button><button id="mz-out">−</button><button id="mz-fit" title="Fit city">⌂</button></div>
+  <div class="card" id="card">
+    <div class="row"><h3 id="c-title">—</h3><div class="grow"></div><button class="ghost small" id="c-close">✕</button></div>
+    <div class="small muted" id="c-sub"></div>
+    <div id="c-case" class="small"></div>
+    <div class="kv" id="c-kv"></div>
+    <div id="c-ctx" class="small"></div>
+    <button class="primary" id="c-design" style="width:100%;margin-top:10px">Design bike lane on this block →</button>
+  </div>
+</div>
+
+<div id="screen-design">
+  <div class="topbar">
+    <span class="title" id="d-title">—</span><span class="tag" id="d-tag"></span>
+    <div class="grow"></div>
+    <div class="tabs" id="tabs"><button data-v="3d" class="active">3D</button><button data-v="plan">Plan</button><button data-v="sec">Section</button></div>
+    <span class="toggle" id="tg-before"><i></i>Show before</span>
+    <span class="toggle" id="tg-anim"><i></i>Animate</span>
+    <span class="toggle on" id="tg-ctx"><i></i>City context</span>
+    <span class="toggle on" id="tg-edit" title="Show the width handles and element selection in Plan and Section"><i></i>Edit in view</span>
+    <span class="toggle on" id="tg-ann" title="Street names, existing-traffic labels, dimensions and element names in 3D, plan and section (north arrow and scale bar always stay)"><i></i>Annotations</span>
+  </div>
+  <div class="body">
+    <div class="viewport" id="vp">
+      <div class="split" id="split3d"><div class="pane" id="p3d-b" style="display:none"><span class="badge before">EXISTING</span></div><div class="pane" id="p3d-a"><span class="badge after" id="b3d">PROPOSED</span></div></div>
+      <canvas id="c3d" style="z-index:1"></canvas>
+      <div class="split" id="splitplan" style="display:none"><div class="pane" id="pp-b" style="display:none"><canvas id="plan-b"></canvas><span class="badge before">EXISTING</span></div><div class="pane" id="pp-a"><canvas id="plan-a"></canvas><span class="badge after" id="bplan">PROPOSED</span></div></div>
+      <div class="split" id="splitsec" style="display:none"><div class="pane" id="ps-b" style="display:none"><canvas id="sec-b"></canvas><span class="badge before">EXISTING</span></div><div class="pane" id="ps-a"><canvas id="sec-a"></canvas><span class="badge after" id="bsec">PROPOSED</span></div></div>
+      <div class="vhint" id="vhint">Drag to orbit · Scroll to zoom · Double-click to reset</div>
+      <div class="props pop" id="pop"></div>
+      <input class="inl" id="inl" type="text" inputmode="decimal" spellcheck="false">
+    </div>
+    <div class="bottom" id="bottom">
+      <div class="bhead">
+        <button class="ghost small" id="btn-collapse">▾ Hide panel</button>
+        <div class="opts" id="opt-chips"></div>
+        <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button>
+        <span class="status" id="status"></span>
+        <div class="grow"></div><span class="small muted" id="dir-note"></span>
+      </div>
+      <div class="bcols">
+        <div class="sec"><h4>Existing configuration <span class="tag info">inferred · editable</span></h4>
+          <div class="form">
+            <div><label>Curb-to-curb (m)</label><input type="number" id="x-ctc" step="0.1"></div>
+            <div><label>Travel lanes (total)</label><select id="x-lanes"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>
+            <div><label>Parking <span id="x-lL"></span></label><select id="x-pL"><option value="1">Yes</option><option value="0">No</option></select></div>
+            <div><label>Parking <span id="x-lR"></span></label><select id="x-pR"><option value="1">Yes</option><option value="0">No</option></select></div>
+            <div><label>Bus / truck route</label><select id="x-bus"><option value="0">No</option><option value="1">Yes</option></select></div>
+            <div><label>AADT (veh/day)</label><input type="number" id="x-aadt" placeholder="unknown"></div>
+          </div>
+          <div class="small muted" id="sw-note" style="margin-top:6px">Sidewalk + boulevard fixed at 3.6 m each side — property lines cannot change.</div>
+          <h4 style="margin-top:12px">Option summary</h4><div class="prosCons" id="summary"></div>
+        </div>
+        <div class="sec editor"><h4>Design the section <span class="small muted mono" id="ed-total"></span></h4>
+          <div class="steps">
+            <span title="Pick an option above, then click a lane in Plan or Section (or in the strip below)"><b>1</b>Layout</span>
+            <span title="Drag the handles between lanes to widen or narrow; the neighbour takes up the difference"><b>2</b>Widths</span>
+            <span title="Set each buffer's separation; add buffers where a lane meets traffic or parking"><b>3</b>Protection</span>
+            <span title="Raise a bike lane or buffer to intermediate or curb height"><b>4</b>Levels</span>
+            <span title="Compliance and recommendations update live"><b>5</b>Check</span>
+          </div>
+          <div class="small muted" id="ed-hint">Click a lane in the view or the strip; drag the ▯ handles between lanes to change widths.</div>
+          <div class="strip" id="ed-strip"></div>
+          <div id="props"></div>
+          <div class="row" style="margin-top:8px"><span class="small muted" id="ed-remain"></span><div class="grow"></div><button class="small" id="btn-balance">Auto-balance</button></div>
+        </div>
+        <div class="sec"><h4>Compliance</h4><div id="warnings"></div></div>
+        <div class="sec"><h4>Recommendations</h4><div id="recs"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
