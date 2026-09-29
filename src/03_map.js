@@ -66,6 +66,7 @@ function drawMap(){
   // parks (point dataset: circle sized by hectares) and city boundary
   ctx.fillStyle='rgba(160,205,140,.55)'; DATA.parks.forEach(([x,y,ha])=>{ if(ha<0.3) return; const [sx,sy]=W2S(x,y); const r=Math.sqrt(ha*1e4/Math.PI)*map.z; if(r<1.5) return; ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.fill(); });
   ctx.strokeStyle='rgba(15,23,42,.35)'; ctx.setLineDash([6*devicePixelRatio,4*devicePixelRatio]); ctx.lineWidth=1*devicePixelRatio; DATA.boundary.forEach(l=>{ ctx.beginPath(); l.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.stroke(); }); ctx.setLineDash([]);
+  if(typeof drawHeatLayer==='function') drawHeatLayer(ctx,W,H,dpr0);   // v3: bike-score heat map under the streets
   ctx.strokeStyle='#D3D6DA'; ctx.lineWidth=1.2*devicePixelRatio; DATA.nc.forEach(g=>{ ctx.beginPath(); g.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.stroke(); });
   const [wx0,wy1]=S2W(0,0),[wx1,wy0]=S2W(W,H); const vis=s=>s.g.some(([x,y])=>x>=wx0-300&&x<=wx1+300&&y>=wy0-300&&y<=wy1+300);
   ctx.lineCap='round'; ctx.lineJoin='round';
@@ -81,6 +82,8 @@ function drawMap(){
   // bikeways
   BW.forEach(b=>{ const st=BW_STYLE(b.t); ctx.strokeStyle=st.c; ctx.lineWidth=st.w*dpr*Math.min(1.2,Math.max(0.6,lod/250)); ctx.setLineDash((st.dash||[]).map(v=>v*dpr)); if(b.g.every(([x,y])=>x<wx0-300||x>wx1+300||y<wy0-300||y>wy1+300)) return; path(b.g); ctx.stroke(); if (b.a && b.t==='Protected Bike Lanes') { ctx.strokeStyle='#15803D'; ctx.lineWidth=st.w*dpr*0.45; ctx.setLineDash([]); path(b.g); ctx.stroke(); } });
   ctx.setLineDash([]);
+  // v3: proposals, bike infrastructure and cycling volumes over the existing network
+  if(typeof drawProposalsLayer==='function'){ drawProposalsLayer(ctx,path,dpr,lod); drawInfraLayer(ctx,dpr,lod,wx0,wx1,wy0,wy1); drawVolumesLayer(ctx,dpr,lod); }
   ctx.restore();   // end of the boundary clip
   if (BRING) { ctx.strokeStyle='rgba(15,23,42,.45)'; ctx.lineWidth=1.2*devicePixelRatio; ctx.beginPath(); BRING.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.closePath(); ctx.stroke(); }
   if (map.hoverBW && map.hoverBW!==map.selBW) { ctx.strokeStyle='rgba(15,23,42,.55)'; ctx.lineWidth=6*dpr; path(map.hoverBW.g); ctx.stroke(); }
@@ -89,6 +92,7 @@ function drawMap(){
   if (map.sel) { const off=!designable(map.sel).ok; ctx.strokeStyle=off?'#9AA0A8':'#F59E0B'; ctx.lineWidth=7*dpr; ctx.setLineDash(off?[8*dpr,5*dpr]:[]); path(map.sel.g); ctx.stroke(); ctx.setLineDash([]); }
   // street labels at high zoom
   if (lod>900) { ctx.fillStyle='#475467'; ctx.font=`${11*dpr}px Inter`; ctx.textAlign='center'; const done=new Set(); SEGS.forEach(s=>{ if(!vis(s)||done.has(s.n)) return; done.add(s.n); const m=s.g[Math.floor(s.g.length/2)]; const [sx,sy]=W2S(m[0],m[1]); ctx.save(); ctx.translate(sx,sy); const a=s.g[s.g.length-1], b=s.g[0]; let ang=Math.atan2(-(a[1]-b[1]),a[0]-b[0]); if(ang>Math.PI/2||ang<-Math.PI/2) ang+=Math.PI; ctx.rotate(ang); ctx.fillText(s.n,0,-4*dpr); ctx.restore(); }); }
+  if(typeof drawNorthArrow==='function') drawNorthArrow(ctx,W,H,dpr);   // v3
 }
 function nearestIn(G,sx,sy){ const [wx,wy]=S2W(sx,sy); const tol=Math.max(6,10/map.z*devicePixelRatio); let best=null,bd=tol; const cx=Math.floor(wx/GRID), cy=Math.floor(wy/GRID);
   for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++){ const arr=G.get((cx+i)+','+(cy+j)); if(!arr) continue; arr.forEach(s=>{ for(let k=1;k<s.g.length;k++){ const d=distSeg(wx,wy,s.g[k-1],s.g[k]); if(d<bd){bd=d;best=s;} } }); }
@@ -109,13 +113,15 @@ function distSeg(px,py,a,b){ const dx=b[0]-a[0],dy=b[1]-a[1]; const t=clamp(((px
   c.addEventListener('mousedown',e=>{ map.drag={x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY,moved:false}; });
   c.addEventListener('dblclick',e=>{ const [sx,sy]=pos(e); const nz=clamp(map.z*2,minZoom(),8*devicePixelRatio); const k=nz/map.z; map.x=sx-(sx-map.x)*k; map.y=sy-(sy-map.y)*k; map.z=nz; clampMap(); drawMap(); });
   $('mz-in').onclick=()=>mapZoomBy(1.6); $('mz-out').onclick=()=>mapZoomBy(1/1.6); $('mz-fit').onclick=()=>mapFit();
-  window.addEventListener('mousemove',e=>{ if(map.drag){ const d=map.drag; if(!d.moved && Math.hypot(e.clientX-d.x0,e.clientY-d.y0)>6) d.moved=true; if(d.moved){ map.x+=(e.clientX-d.x)*devicePixelRatio; map.y+=(e.clientY-d.y)*devicePixelRatio; clampMap(); drawMap(); } d.x=e.clientX; d.y=e.clientY; return; } if(e.target!==c) return; const [sx,sy]=pos(e); const hb=nearestBW(sx,sy); const h=hb?null:nearestSeg(sx,sy); if(h!==map.hover||hb!==map.hoverBW){ map.hover=h; map.hoverBW=hb; const dz=h?designable(h):null; c.style.cursor=h?(dz.ok?'pointer':'not-allowed'):hb?'pointer':'crosshair'; drawMap();
-      const tip=$('maptip'); if(h&&!dz.ok){ tip.innerHTML='<b>'+titleCase(h.n)+' · not available for a bike lane</b>'+dz.reason; tip.classList.add('show'); }
-      else if(h&&h.bw){ const cs=designCase(h); tip.innerHTML='<b>'+titleCase(h.n)+' · '+cs.label+'</b>Existing: '+cs.existing+(cs.when?' · '+cs.when:''); tip.classList.add('show'); }   // v2: the case for blocks that already have a facility
+  window.addEventListener('mousemove',e=>{ if(map.drag){ const d=map.drag; if(!d.moved && Math.hypot(e.clientX-d.x0,e.clientY-d.y0)>6) d.moved=true; if(d.moved){ map.x+=(e.clientX-d.x)*devicePixelRatio; map.y+=(e.clientY-d.y)*devicePixelRatio; clampMap(); drawMap(); } d.x=e.clientX; d.y=e.clientY; return; } if(e.target!==c) return; const [sx,sy]=pos(e); const hb=nearestBW(sx,sy); const h=hb?null:nearestSeg(sx,sy); if(h!==map.hover||hb!==map.hoverBW){ map.hover=h; map.hoverBW=hb; const dz=h?designable(h):null; c.style.cursor=typeof mapCursor==='function'?mapCursor(h,hb):h?(dz.ok?'pointer':'not-allowed'):hb?'pointer':'crosshair'; drawMap();
+      const tip=$('maptip'); const pre=(typeof propOf==='function'&&h&&dz.ok&&map.mode==='add')?(propOf(h.i)?'<span style="color:#FCA5A5">− remove</span> · ':'<span style="color:#F0ABFC">+ add</span> · '):'';   // v3: what a click does
+      if(h&&!dz.ok){ tip.innerHTML='<b>'+titleCase(h.n)+' · not available for a bike lane</b>'+dz.reason; tip.classList.add('show'); }
+      else if(h&&h.bw){ const cs=designCase(h); tip.innerHTML='<b>'+pre+titleCase(h.n)+' · '+cs.label+'</b>Existing: '+cs.existing+(cs.when?' · '+cs.when:''); tip.classList.add('show'); }   // v2: the case for blocks that already have a facility
+      else if(h&&pre){ tip.innerHTML='<b>'+pre+titleCase(h.n)+'</b>'+h.u+' · '+h.len+' m'; tip.classList.add('show'); }
       else if(hb){ tip.innerHTML='<b>'+bwTitle(hb)+'</b>'+bwDesc(hb)+(hb.a?' · AAA network':'')+' · click for details'; tip.classList.add('show'); }   // v2: a bikeway feature with no street block under it
       else tip.classList.remove('show'); }
     if((map.hover||map.hoverBW)&&$('maptip').classList.contains('show')){ const tip=$('maptip'); const r=c.getBoundingClientRect(); const x=e.clientX-r.left+14, y=e.clientY-r.top+16; tip.style.left=Math.min(x, c.clientWidth-tip.offsetWidth-8)+'px'; tip.style.top=Math.min(y, c.clientHeight-tip.offsetHeight-8)+'px'; } });
-  window.addEventListener('mouseup',e=>{ if(map.drag&&!map.drag.moved&&$('screen-map').classList.contains('active')){ const r=c.getBoundingClientRect(); const inside=e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom; if(inside&&(e.target===c||e.target===document.body||e.target===document.documentElement)){ const [sx,sy]=pos(e); const b=nearestBW(sx,sy); if(b) selectBW(b); else { const s=nearestSeg(sx,sy); if(s) selectSeg(s); } } } map.drag=null; });
+  window.addEventListener('mouseup',e=>{ if(map.drag&&!map.drag.moved&&$('screen-map').classList.contains('active')){ const r=c.getBoundingClientRect(); const inside=e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom; if(inside&&(e.target===c||e.target===document.body||e.target===document.documentElement)){ const [sx,sy]=pos(e); const b=nearestBW(sx,sy), s=nearestSeg(sx,sy); if(typeof mapClick==='function'&&mapClick(b,s)) {} else if(b) selectBW(b); else if(s) selectSeg(s); } } map.drag=null; });   // v3: add / route modes take the click first
   window.addEventListener('resize',()=>{ if($('screen-map').classList.contains('active')) { mapResize(); clampMap(); drawMap(); } });
   // the map pane can change size without a window resize (side panels, embedded browsers): follow the element itself
   if (window.ResizeObserver) new ResizeObserver(()=>{ if($('screen-map').classList.contains('active') && (c.width!==c.clientWidth*devicePixelRatio || c.height!==c.clientHeight*devicePixelRatio)) { mapResize(); clampMap(); drawMap(); } }).observe($('screen-map'));
@@ -132,7 +138,7 @@ function selectBW(b){ map.selBW=b; map.sel=null; drawMap(); const blk=blockOfBW(
   $('c-kv').innerHTML=[['Facility',bwDesc(b)],['Direction',dir],['AAA',b.a?'on the network'+(b.seg?', AAA segment':''):(b.seg?'AAA segment, not on the network':'no')],['Built / upgraded',(b.yr||'—')+(b.up?' / '+b.up:'')],['Surface',b.surf||'—'],['Snow clearing',b.snow?'yes':'no'],['Speed limit',b.spd?b.spd+' km/h':'—'],['Bound types',[b.wn?'W/N: '+b.wn:null,b.es?'E/S: '+b.es:null].filter(Boolean).join(' · ')||'—']].map(([k,v])=>`<div><b>${k}</b><span>${v}</span></div>`).join('');
   $('c-ctx').innerHTML=(b.note?`<div class="msg" style="background:#F1F5F9;color:var(--ink2)">Layer note: “${b.note}”</div>`:'')+(b.sub&&SUBTYPE[b.sub]?`<div class="msg info" style="margin-top:4px">Subtype ${b.sub}: ${SUBTYPE[b.sub]}</div>`:'');
   const btn=$('c-design'); btn.disabled=!blk; btn.textContent=blk?'Go to '+titleCase(blk.n)+' →':(off?'Off-street path — no roadway design':'No street block under this piece');
-  $('card').classList.add('show'); }
+  $('c-prop').style.display='none'; $('c-blocks').style.display='none'; $('c-design1').style.display='none'; $('c-close').style.display=''; $('c-design').onclick=defaultDesignClick; $('stats').classList.remove('show'); $('card').classList.add('show'); }
 function selectSeg(s){ map.sel=s; map.selBW=null; if(map.z<0.5*devicePixelRatio) zoomTo(s); drawMap(); const ctx=segContext(s); $('c-title').textContent=titleCase(s.n); $('c-sub').textContent=`${s.u} · ${s.len} m block · ${s.spd} km/h`;
   // v2: the existing facility decoded, and the design case it leads to
   const cs=designCase(s); const bw=s.bw? cs.existing : 'None';
@@ -147,9 +153,11 @@ function selectSeg(s){ map.sel=s; map.selBW=null; if(map.z<0.5*devicePixelRatio)
   // blocks that cannot take a design keep their card (so the reason is legible) but the design button is off
   const dz=designable(s); const btn=$('c-design'); btn.disabled=!dz.ok; btn.textContent=dz.ok?cs.button:'Not available for a bike lane design';
   if(!dz.ok) $('c-ctx').insertAdjacentHTML('beforeend','<div class="why"><b>Why not:</b> '+dz.reason+'</div>');
-  $('card').classList.add('show'); }
+  if(typeof renderCardProp==='function') renderCardProp(s);   // v3: add to / remove from the proposal
+  $('c-design1').style.display='none'; $('c-close').style.display=dz.ok?'none':'';   // v3: a card with the design button stays until another selection
+  $('stats').classList.remove('show'); $('card').classList.add('show'); }
 function titleCase(s){ return s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()).replace(/\bAv\b/,'Ave').replace(/\bSt\b/,'St'); }
-$('c-close').onclick=()=>{ $('card').classList.remove('show'); map.sel=null; map.selBW=null; drawMap(); };
+$('c-close').onclick=()=>{ $('card').classList.remove('show'); map.sel=null; map.selBW=null; drawMap(); if(typeof activeProp==='function'&&activeProp()&&Object.keys(activeProp().blocks).length) showPropCard(activeProp()); };   // v3: the proposal card comes back — it is never closed away
 // search
 const qi=$('q'), ac=$('ac'); let acIdx=-1;
 qi.addEventListener('input',()=>{ const v=qi.value.trim().toUpperCase(); if(v.length<2){ac.classList.remove('show');return;} const hits=SEGS.filter(s=>s.n.includes(v)).slice(0,14); if(!hits.length){ac.classList.remove('show');return;} ac.innerHTML=hits.map((s,i)=>{ const dz=designable(s); return `<div data-i="${s.i}" class="${dz.ok?'':'off'}">${titleCase(s.n)}<span>${dz.ok?(s.u+' · '+designCase(s).label):'not available · '+dz.reason.split(':')[0]}</span></div>`; }).join(''); ac.classList.add('show'); acIdx=-1; });

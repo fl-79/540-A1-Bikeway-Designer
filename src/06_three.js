@@ -30,6 +30,7 @@ function Quads(mat){ this.p=[]; this.mat=mat; }
 Quads.prototype.seg=function(ax,az,bx,bz,w,yf){ const dx=bx-ax, dz=bz-az, L=Math.hypot(dx,dz)||1; const nx=-dz/L*w/2, nz=dx/L*w/2; const y=(x,z)=>typeof yf==='function'?yf(x,z):yf;
   const c=[[ax+nx,az+nz],[bx+nx,bz+nz],[bx-nx,bz-nz],[ax-nx,az-nz]]; [[0,1,2],[0,2,3]].forEach(t=>t.forEach(k=>this.p.push(c[k][0],y(c[k][0],c[k][1]),c[k][1]))); };
 Quads.prototype.rect=function(x0,z0,x1,z1,yf){ this.seg((x0+x1)/2,z0,(x0+x1)/2,z1,Math.abs(x1-x0),yf); };
+Quads.prototype.quad=function(a,b,c,d,yf){ const y=(x,z)=>typeof yf==='function'?yf(x,z):yf; [[a,b,c],[a,c,d]].forEach(t=>t.forEach(p=>this.p.push(p[0],y(p[0],p[1]),p[1]))); };   // v3: any four corners (a taper)
 Quads.prototype.line=function(g,w,yf,dash){ for(let i=1;i<g.length;i++){ const [ax,az]=g[i-1],[bx,bz]=g[i]; const L=Math.hypot(bx-ax,bz-az); if(L<0.05) continue; if(!dash){ this.seg(ax,az,bx,bz,w,yf); continue; }
   const ux=(bx-ax)/L, uz=(bz-az)/L; for(let t=0;t<L;t+=dash[0]+dash[1]){ const t1=Math.min(L,t+dash[0]); this.seg(ax+ux*t,az+uz*t,ax+ux*t1,az+uz*t1,w,yf); } } };
 Quads.prototype.mesh=function(g){ if(!this.p.length) return null; const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(this.p,3)); const n=new Float32Array(this.p.length); for(let i=1;i<n.length;i+=3) n[i]=1; geo.setAttribute('normal',new THREE.BufferAttribute(n,3)); const m=new THREE.Mesh(geo,this.mat); m.receiveShadow=true; g.add(m); return m; };
@@ -61,8 +62,11 @@ function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; 
   const t=T3.target; T3.cam.position.set(t.x+T3.dist*Math.cos(T3.el)*Math.sin(T3.az), t.y+T3.dist*Math.sin(T3.el), t.z+T3.dist*Math.cos(T3.el)*Math.cos(T3.az)); T3.cam.lookAt(t); scaleLabels(); }
 function render3D(){ const r=T3.renderer, c=$('c3d'); const W=c.clientWidth*devicePixelRatio, H=c.clientHeight*devicePixelRatio; if(c.width!==W||c.height!==H){ r.setSize(c.clientWidth,c.clientHeight,false); }
   r.setScissorTest(true);
-  if (D.before) { T3.groups.after.visible=false; T3.groups.before.visible=true; r.setViewport(0,0,W/2,H); r.setScissor(0,0,W/2,H); r.render(T3.scene,T3.cam); T3.groups.before.visible=false; T3.groups.after.visible=true; r.setViewport(W/2,0,W/2,H); r.setScissor(W/2,0,W/2,H); r.render(T3.scene,T3.cam); }
-  else { T3.groups.before.visible=false; T3.groups.after.visible=true; r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }
+  const pc=T3.propCtx;   // v3: the proposal's other blocks show in the proposed view only
+  if (D.before) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const dpr=devicePixelRatio; const wb=Math.round((pb.right-cr.left)*dpr), xa=Math.round((pa.left-cr.left)*dpr);   // the panes' own widths (draggable divider)
+    T3.groups.after.visible=false; T3.groups.before.visible=true; if(pc) pc.visible=false; r.setViewport(0,0,wb,H); r.setScissor(0,0,wb,H); r.render(T3.scene,T3.cam);
+    T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; r.setViewport(xa,0,W-xa,H); r.setScissor(xa,0,W-xa,H); r.render(T3.scene,T3.cam); }
+  else { T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }
 
 function build3D(){ init3D(); const o=curOpt(); if(!o) return; ['before','after'].forEach(k=>{ if(T3.groups[k]) T3.scene.remove(T3.groups[k]); }); T3.movers=[]; T3.labels=[];
   TZ0 = elevAt(o && D.ctx ? D.ctx.seg.g[0][0] : 0, D.ctx.seg.g[0][1]);
@@ -112,30 +116,60 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   // offset edges vertex by vertex — instead of a box per segment, so curves are smooth and a ramp's surface runs into its deck
   // without a break; heights follow hf (bridge decks and ramps) and the ribbon casts a shadow when it is up in the air
   const DS=new Map(); const ds=m=>{ if(!DS.has(m)){ const c=m.clone(); c.side=THREE.DoubleSide; DS.set(m,c); } return DS.get(m); };
-  const ribbon=(pts,w,mat,top,h,hf,yoff)=>{ if(pts.length<2) return; const Lp=offsetLine(pts,-w/2), Rp=offsetLine(pts,w/2); const yT=(x,z)=>ez(x,z)+top+(hf?hf(x,z):0)+(yoff||0);
-    const P=[]; const V=(p,dy)=>[p[0],yT(p[0],p[1])-(dy||0),p[1]]; const tri=(a,b,c)=>P.push(...a,...b,...c); const quad=(a,b,c,d)=>{ tri(a,b,c); tri(a,c,d); }; let up=false;
-    for(let i=1;i<pts.length;i++){ const TL0=V(Lp[i-1]),TL1=V(Lp[i]),TR0=V(Rp[i-1]),TR1=V(Rp[i]),BL0=V(Lp[i-1],h),BL1=V(Lp[i],h),BR0=V(Rp[i-1],h),BR1=V(Rp[i],h); if(TL0[1]-ez(Lp[i-1][0],Lp[i-1][1])>0.6) up=true;
-      quad(TL0,TR0,TR1,TL1); quad(BL0,BL1,BR1,BR0); quad(TL0,TL1,BL1,BL0); quad(TR0,BR0,BR1,TR1); if(i===1) quad(TL0,BL0,BR0,TR0); if(i===pts.length-1) quad(TL1,TR1,BR1,BL1); }
-    const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(P,3)); geo.computeVertexNormals(); const m=new THREE.Mesh(geo,ds(mat)); m.receiveShadow=true; if(hf&&up) m.castShadow=true; g.add(m); };
+  // v3: a ribbon is built from its two edges (ribbonLR), so a merging ramp can be built from its tapered edges; ribbon(pts,w)
+  // is the parallel-edged case
+  // hIdx (optional): the structure height as a function of the position along the ribbon (0..1) — for a tapered ramp, whose
+  // two edges are different lengths, so that both edges take the height of the same point of the centreline and the surface
+  // does not twist
+  const ribbonLR=(Lp0,Rp0,mat,top,h,hf,yoff,hIdx)=>{ if(Lp0.length<2||Rp0.length<2) return; const n=Math.max(Lp0.length,Rp0.length,2); const Lp=Lp0.length===n?Lp0:resampleLine(Lp0,n), Rp=Rp0.length===n?Rp0:resampleLine(Rp0,n); const yT=(x,z,i)=>ez(x,z)+top+(hIdx?hIdx(i/(n-1)):(hf?hf(x,z):0))+(yoff||0);
+    const P=[]; const V=(p,dy,i)=>[p[0],yT(p[0],p[1],i)-(dy||0),p[1]]; const tri=(a,b,c)=>P.push(...a,...b,...c); const quad=(a,b,c,d)=>{ tri(a,b,c); tri(a,c,d); }; let up=false;
+    for(let i=1;i<n;i++){ const TL0=V(Lp[i-1],0,i-1),TL1=V(Lp[i],0,i),TR0=V(Rp[i-1],0,i-1),TR1=V(Rp[i],0,i),BL0=V(Lp[i-1],h,i-1),BL1=V(Lp[i],h,i),BR0=V(Rp[i-1],h,i-1),BR1=V(Rp[i],h,i); if(TL0[1]-ez(Lp[i-1][0],Lp[i-1][1])>0.6) up=true;
+      quad(TL0,TR0,TR1,TL1); quad(BL0,BL1,BR1,BR0); quad(TL0,TL1,BL1,BL0); quad(TR0,BR0,BR1,TR1); if(i===1) quad(TL0,BL0,BR0,TR0); if(i===n-1) quad(TL1,TR1,BR1,BL1); }
+    const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(P,3)); geo.computeVertexNormals(); const m=new THREE.Mesh(geo,ds(mat)); m.receiveShadow=true; if(hf&&up) m.castShadow=true; (ribbon.target||g).add(m); };
+  const ribbon=(pts,w,mat,top,h,hf,yoff)=>{ if(pts.length<2) return; ribbonLR(offsetLine(pts,-w/2),offsetLine(pts,w/2),mat,top,h,hf,yoff); };
   const strip=(pts,w,mat,top,h,hf,yoff)=>clipPoly(pts,BOX).forEach(p=>ribbon(p,w,mat,top,h,hf,yoff));
   const deckAt=deckAtSt;
   // decks that share a surface (the bridge and its ramps, or the deck under the block) are co-planar: the narrower one sits a few
   // millimetres higher so the two surfaces never flicker through each other
-  const upList=C.streets.filter(st=>st.deck).sort((a,b)=>b.m.ctc-a.m.ctc); upList.forEach((st,i)=>st._yo=0.004*(i+1));
+  // v3: one height field for every structure at a level. Where pieces overlap (a ramp's gore inside its deck, two ramps meeting
+  // at one deck, a divided deck's two carriageways) each vertex takes the height of the highest piece that contains it at
+  // that level, so overlapping surfaces are exactly coplanar and read as one slab — no micro-offsets, no steps, no twist.
+  const upList=C.streets.filter(st=>st.deck&&!st.host2); upList.forEach(st=>{ st._yo=0; });
+  const HF=(st,x,z)=>{ let h=deckAt(st,x,z); upList.forEach(o=>{ if(o===st||!o.E||!o.E.ring) return; if(!pointInRing(x,z,o.E.ring)) return; const ho=deckAt(o,x,z); if(Math.abs(ho-h)<0.5&&ho>h) h=ho; }); return h; };   // within half a metre only: a ramp already falling away beside its deck keeps its own grade (a wider tolerance twisted its inner edge up to the deck)
   const MP={path:MAT(0xE9E5DC), des:MAT(0xDCE5D6), island:MAT(0xCAD4B8), plaza:MAT(0xECE8E0), pier:MAT(0xB9BBBD)};
   const inR=pts=>pts.some(([x,z])=>inBox(x,z));
   const Q={white:new Quads(mqc('white')), yellow:new Quads(mqc('yellow')), bike:new Quads(mqc('bike')), paint:new Quads(mqc('paint')), shared:new Quads(mqc('shared'))}; const yRoad=(x,z)=>ez(x,z)+Y.mark;
   // sidewalk band and curbs stop at the crossing street's curb line; the pavement runs on to its far curb → clean rectangular junctions
+  // v3: the deck that carries the block: its markings run straight through the block, silenced only inside the block's bike lanes and buffers
+  const BZ=(curOpt()?curOpt().els:[]).filter(e=>e.k==='bike'||e.k==='buf').map(e=>[e.x-0.1,e.x+e.w+0.1]);
+  const mkRuns=(st,gg)=>{ if(st!==C.blockHost||!BZ.length) return clipPoly(gg,BOX); const pts=[gg[0],...alongLine(gg,1.5,0.75).map(q=>[q[0],q[1]]),gg[gg.length-1]]; const runs=[]; let run=[]; pts.forEach(p=>{ const inZ=p[1]>0&&p[1]<LEN&&BZ.some(([a,b])=>p[0]>a&&p[0]<b); if(inZ){ if(run.length>1) runs.push(run); run=[]; } else run.push(p); }); if(run.length>1) runs.push(run); return runs.flatMap(r=>clipPoly(r,BOX)); };
   C.streets.forEach(st=>{ if(!inR(st.g)) return; const m=st.m; const band=trimLine(st.g,st.trim[0],st.trim[1]), pav=extendLine(st.g,st.trim[0],st.trim[1]);
     // v2: bridges and viaducts stand on their deck (ramping down to grade where they land), cast shadows and sit on piers
-    const hf=st.deck?((x,z)=>deckAt(st,x,z)+(st._yo||0)):null, yM=hf?((x,z)=>ez(x,z)+Y.mark+hf(x,z)):yRoad; st._yM=yM;
+    const hf=st.deck?((x,z)=>HF(st,x,z)):null, yM=hf?((x,z)=>ez(x,z)+Y.mark+hf(x,z)):yRoad; st._yM=yM;
+    if(st.host2){ streetMarkings(st).forEach(mk=>{ mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); }); return; }   // v3: a hosted piece rides its deck — markings only, no slab of its own
+    if(hf&&st.E){   // v3: every structure piece is one surface from its edges (width tapers, merge tapers); parapets along them, none inside its deck and none at grade
+      // v3: no parapet or pier inside ANY other structure piece at the same height — a deck's edge line stops where a ramp joins it
+      // at deck level (the merge), a ramp's inside its deck; a piece passing at another level keeps its parapet
+      const inDeck=p=>{ const h=deckAt(st,p[0],p[1]); return C.streets.some(o=>o!==st&&o.deck&&!o.host2&&(o.E&&o.E.ring?pointInRing(p[0],p[1],o.E.ring):(o.m.ctc>st.m.ctc+0.5&&nearOnPoly(p,o.g)[0]<o.m.ctc/2-0.3))&&Math.abs(deckAt(o,p[0],p[1])-h)<0.6); };
+      const atGrade=p=>deckAt(st,p[0],p[1])<0.5;
+      const dropIn=gg=>{ const pts=[gg[0],...alongLine(gg,2,1).map(q=>[q[0],q[1]]),gg[gg.length-1]]; const runs=[]; let run=[]; pts.forEach(p=>{ if(inDeck(p)||atGrade(p)){ if(run.length>1) runs.push(run); run=[]; } else run.push(p); }); if(run.length>1) runs.push(run); return runs; };
+      // heights by position along the ramp's (extended) centreline, so both edges of the taper share one height
+      // every vertex takes the shared structure height (HF): the ramp's own height outside its deck, the deck's inside it
+      ribbonLR(st.E.pav.L,st.E.pav.R,M.ctxRd,Y.road,0.8,hf);
+      ['L','R'].forEach(sd=>{ const a=st.E.pav[sd], b=st.E.band[sd]; const n=Math.max(a.length,b.length); const A=resampleLine(a,n), B=resampleLine(b,n);
+        // the parapet strip between the pavement edge and the band edge, only outside the deck
+        const mid=A.map((p,i)=>[(p[0]+B[i][0])/2,(p[1]+B[i][1])/2]); dropIn(mid).forEach(run=>{ const w=Math.max(0.5,Math.hypot(B[0][0]-A[0][0],B[0][1]-A[0][1])); strip(run,w,M.ctxSw,Y.walk,0.6,hf); }); });
+      alongLine(st.g,24,12).forEach(([x,z])=>{ const h=hf(x,z); if(h<2.5||!inBox(x,z)||inDeck([x,z])) return; cyl(0.55,Math.max(0.5,h-0.8),MP.pier,x,ez(x,z),z,g,12); });
+      streetMarkings(st).forEach(mk=>{ mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
+      st.E.pav.merges.forEach(m=>{ const o=m.deck; const yD=(x,z)=>ez(x,z)+Y.mark+HF(o,x,z)+0.002; clipPoly(m.line,BOX).forEach(p=>Q.white.line(p,0.12,yD,[2,3.5])); });   // the gore lane line, on the deck
+      return; }
     // sidewalk zones as two strips (curb line → property line) so the pavement stays visible between them, plus the curb lines
     // per side: at a T-junction the sidewalk and curb on the side with no crossing street run straight through
-    { const bandW=hf ? (m.ow ? m.ctc+1.2 : Math.min(st.row, m.ctc+4.5)) : st.row; const swW=Math.max(0.5,(bandW-m.ctc)/2); [-1,1].forEach(sg=>{   /* a ramp carries only its parapet, a bridge a sidewalk */ const sd=sg<0?'L':'R'; const bs=hf?pav:trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(bs.length<2) return;
+    { const bandW=hf ? structBandW(st) : st.row; const swW=Math.max(0.5,(bandW-m.ctc)/2); [-1,1].forEach(sg=>{   /* a ramp carries only its parapet, a bridge a sidewalk */ const sd=sg<0?'L':'R'; const bs=hf?pav:trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(bs.length<2) return;
       strip(offsetLine(bs,sg*(m.ctc/2+swW/2)),swW,M.ctxSw,Y.walk,hf?0.6:0.45,hf); strip(offsetLine(bs,sg*m.ctc/2),0.25,M.ctxCurb,Y.walk,hf?0.6:0.45,hf); }); }
     strip(pav,Math.max(3,m.ctc),M.ctxRd,Y.road,hf?0.8:0.3,hf);
     if(hf) alongLine(st.g,24,12).forEach(([x,z])=>{ const h=hf(x,z); if(h<2.5||!inBox(x,z)) return; cyl(0.55,Math.max(0.5,h-0.8),MP.pier,x,ez(x,z),z,g,12); });   // piers under the deck, every 24 m
-    streetMarkings(st).forEach(mk=>{ clipPoly(mk.g,BOX).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
+    streetMarkings(st).forEach(mk=>{ mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
     // bus stops on the street (TransLink GTFS): pole + sign on the correct side
     if(m.stops){ const len=[0]; for(let i=1;i<st.g.length;i++) len.push(len[i-1]+Math.hypot(st.g[i][0]-st.g[i-1][0],st.g[i][1]-st.g[i-1][1]));
       ['L','R'].forEach(sd=>(m.stops[sd]||[]).forEach(([d])=>{ let i=1; while(i<len.length-1&&len[i]<d) i++; const a=st.g[i-1], b=st.g[i]; const f=clamp((d-len[i-1])/((len[i]-len[i-1])||1),0,1); const px=a[0]+(b[0]-a[0])*f, pz=a[1]+(b[1]-a[1])*f; const ux=(b[0]-a[0]), uz=(b[1]-a[1]), L=Math.hypot(ux,uz)||1; const off=(sd==='L'?-1:1)*(m.ctc/2+1.2); const x=px+uz/L*off, z=pz-ux/L*off; const y=ez(x,z)+Y.walk; if(!inBox(x,z)) return;
@@ -147,6 +181,12 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
       if(l.kind==='shared'){ [-b.ctc/4,b.ctc/4].forEach(off=>{ alongLine(offsetLine(base,off),12,6).forEach(([x,z,ux,uz])=>{ if(inBox(x,z)) Q.shared.seg(x-ux*0.6,z-uz*0.6,x+ux*0.6,z+uz*0.6,0.5,yH); }); }); return; }
       const cg=offsetLine(base,l.off); const lineQ=(Q,gg,w)=>clipPoly(gg,BOX).forEach(p=>Q.line(p,w,yH)); lineQ(l.kind==='prot'?Q.bike:Q.paint,cg,l.w); lineQ(Q.white,offsetLine(cg,-l.w/2),0.1); lineQ(Q.white,offsetLine(cg,l.w/2),0.1);
       if(l.kind==='prot') strip(offsetLine(cg,(l.off<0?1:-1)*(l.w/2+0.3)),0.6,M.ctxBuf,Y.walk,0.45,hf); }); });
+  // v3: over a host deck, the block's bike lanes taper into the deck's existing lanes at each end (10 m): one lane along the deck
+  if(C.blockHost){ const hl=C.bikeHosted.filter(h=>h.blockHost); const host=C.blockHost; const yH=host._yM||yRoad; const lanesH=hl.length?bikewayLanes(hl[0].b,hl[0].ctc,'L').filter(l=>l.kind!=='shared'):[];
+    const bikesB=(curOpt()?curOpt().els:[]).filter(e=>e.k==='bike');
+    [0,1].forEach(k=>{ const zEnd=k?LEN:0, sgn=k?1:-1; const hp=nearOnPoly([0,zEnd],host.g)[1]; const hx=hp?hp[0]:0;
+      bikesB.forEach(b=>{ const bc=b.x+b.w/2; let best=null; lanesH.forEach(l=>{ const xe=hx+l.off; const d=Math.abs(xe-bc); if(d<6&&(!best||d<best.d)) best={xe,w:l.w,d}; }); if(!best) return; const T=10, z2=zEnd+sgn*T; const x0=best.xe-best.w/2, x1=best.xe+best.w/2;
+        Q.bike.quad([b.x,zEnd],[b.x+b.w,zEnd],[x1,z2],[x0,z2],(x,z)=>yH(x,z)+0.003); Q.white.quad([b.x,zEnd],[b.x+0.1,zEnd],[x0+0.1,z2],[x0,z2],(x,z)=>yH(x,z)+0.004); Q.white.quad([b.x+b.w-0.1,zEnd],[b.x+b.w,zEnd],[x1,z2],[x1-0.1,z2],(x,z)=>yH(x,z)+0.004); }); }); }
   // v2: paths in the path language (a paved path with a dashed centreline — not a protected lane): the City's pieces no street or
   // OSM path carries, then the OSM paths themselves; bridge paths on a deck at 6 m per level, ramping down over 30 m at a free end
   const pathStrip=(g,w,des,ow,hf)=>{ strip(g,w,des?MP.des:MP.path,Y.road+0.03,hf?0.5:0.08,hf); if(!ow) clipPoly(g,BOX).forEach(q=>Q.white.line(q,0.08,(x,z)=>ez(x,z)+Y.road+0.035+(hf?hf(x,z):0),[0.8,1.6])); };
@@ -167,7 +207,13 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
     strip([...l.g,l.g[1]],w,M.ctxRd,Y.road,0.3); flatShape(isl,MP.island,Y.walk-0.02); });
   Object.values(Q).forEach(q=>q.mesh(g));
   // existing street trees on every surrounding street (public-trees), instanced so a thousand trees stay one draw call each
-  { const trees=[]; C.streets.forEach(st=>{ if(!inR(st.g)) return; streetTrees(st).forEach(t=>{ if(inBox(t.x,t.z)) trees.push(t); }); });
+  // v3: the other blocks of the proposal with their lanes and buffers — in a group of their own, shown in the proposed view only
+  { const pg=new THREE.Group(); const QB=new Quads(mqc('bike')), QW=new Quads(mqc('white')); const yP=(x,z)=>yRoad(x,z)+0.004; ribbon.target=pg;
+    (C.propLanes||[]).forEach(pl=>{ if(!inR(pl.g)) return; pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2);
+      if(el.k==='bike'){ clipPoly(cg,BOX).forEach(p=>QB.line(p,el.w,yP)); [el.x,el.x+el.w].forEach(x=>clipPoly(offsetLine(pl.g,x),BOX).forEach(p=>QW.line(p,0.1,yP))); }
+      else strip(cg, el.w, M.ctxBuf, Y.walk, Math.max(0.05,el.h||0.15)); }); });
+    ribbon.target=null; QB.mesh(pg); QW.mesh(pg); g.add(pg); T3.propCtx=pg; }
+  { const trees=[]; C.streets.forEach(st=>{ if(!inR(st.g)) return; streetTrees(st, C.streets).forEach(t=>{ if(inBox(t.x,t.z)) trees.push(t); }); });
     if(trees.length){ const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5,0.5,1,8),M.ctxTrunk,trees.length), crown=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,8),M.ctxLeaf,trees.length);
       const mtx=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(), s=new THREE.Vector3();
       trees.forEach((t,i)=>{ const H=clamp(t.h,3,18), r=clamp(H*0.19,0.6,2.4), tw=clamp(t.d/100,0.12,0.5), y0=ez(t.x,t.z)+Y.walk;
@@ -202,17 +248,19 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
   const zS0 = EI[0].type==='cross' ? ZA : 0, zS1 = EI[1].type==='cross' ? ZB : LEN;
   const noLeg=(i,sd)=>EI[i].type==='cross' && (sd==='L'?S_.legs[i].L==null:S_.legs[i].R==null);   // T-junction: the cross street does not continue on this side
   // the carriageway strip under the block's own elements, so gaps between elements never show the plate
-  box(sw_r(els)-sw_l(els),0.3,zS1-zS0,M.asphalt,sw_l(els),-0.34,zS0,g);   // top −0.04, just under the element boxes
+  if(!S_.host) box(sw_r(els)-sw_l(els),0.3,zS1-zS0,M.asphalt,sw_l(els),-0.34,zS0,g);   // top −0.04, just under the element boxes (over a host deck the deck is the surface)
   // v2: on a structure — the deck slab under the block, piers to the ground and parapets on the edges (none over a host deck)
   const DH=S_.deckH||0; const PR=S_.prof||[0,0]; if(DH>0){ const MD=MAT(0xC4C6C8); box(xR-xL+0.6,1.4,LEN,MD,xL-0.3,-1.75,0,g); for(let z=12;z<LEN-4;z+=24){ const hz=PR[0]+(PR[1]-PR[0])*z/LEN; if(hz>2.4) [xL+1.8,xR-1.8].forEach(px=>cyl(0.5,hz-1.7,MD,px,-hz,z,g,12)); }
     if(!S_.host) [xL,xR-0.3].forEach(px=>box(0.3,1.4,zS1-zS0,M.curb,px,0.1,zS0,g)); }
   // real footprints fronting this block, extruded at their LiDAR height (flagged ones in a warmer tone; on the true ground when the block is on a deck)
-  S_.C.blds.forEach(b=>{ if(b.c[1]<-20||b.c[1]>LEN+20) return; if(Math.abs(b.c[0])<Math.abs(xL)-1) return;
+  const HALF=Math.max(320, LEN*0.6+80), BOXB={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF};   // v3: frontages stay inside the site plate, and near the block
+  S_.C.blds.forEach(b=>{ if(b.c[1]<-20||b.c[1]>LEN+20) return; if(Math.abs(b.c[0])<Math.abs(xL)-1||Math.abs(b.c[0])>Math.abs(xL)+60) return; if(!b.p.every(([x,z])=>x>=BOXB.x0&&x<=BOXB.x1&&z>=BOXB.z0&&z<=BOXB.z1)) return;
     const sh=new THREE.Shape(b.p.map(([x,z])=>new THREE.Vector2(x,-z)));
     const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:Math.max(b.h,3),bevelEnabled:false}), b.f?M.bldNoH:M.bld);
     const [bwx,bwy]=S_.C.F.toWorld(b.c[0],b.c[1]); m.rotation.x=-Math.PI/2; m.position.y=elevAt(bwx,bwy)-TZ0-Math.tan(Math.atan(D.ctx.grade))*b.c[1]+Y.ground-DH; m.castShadow=m.receiveShadow=true; g.add(m); outline(m,g); });
   // elements
   els.forEach(e=>{ const sd=e.side==='C'?'R':e.side; const h=Math.max(e.h,0.02);
+    if(S_.host&&(e.k==='travel'||e.k==='park'||e.k==='sw')) return;   // v3: over a host deck the block adds only its bike lanes and buffers
     // element boxes top out at h−0.03 (group; h ≥ 0.02), i.e. pavement at −0.01 → world Y.road, level with the existing street;
     // pavement markings drawn from y≈0.005 then sit a clear 2.5 cm above them
     if (e.k==='travel'||e.k==='park'||e.k==='bike') { box(e.w,h+0.02,ZB-ZA, e.k==='bike'?M.bike:e.k==='park'?M.park:M.asphalt, e.x,-0.05,ZA,g); }
@@ -234,7 +282,7 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
   const z0m=ZA+(EI[0].type==='cross'?EL[0].carStart:(isStop(EI[0])?5.0:0.5)), z1m=ZB-(EI[1].type==='cross'?EL[1].carStart:(isStop(EI[1])?5.0:0.5));
   const zb0=ZA+(EI[0].type==='cross'?EL[0].bikeStart:(EI[0].type==='dead'?5.0:EI[0].type==='path'?1.0:0.5)), zb1=ZB-(EI[1].type==='cross'?EL[1].bikeStart:(EI[1].type==='dead'?5.0:EI[1].type==='path'?1.0:0.5));
   const travel=els.filter(e=>e.k==='travel'), bikes=els.filter(e=>e.k==='bike'), park=els.filter(e=>e.k==='park'), sw=els.filter(e=>e.k==='sw');
-  travel.forEach((tl,i)=>{ if(i===0) return; const centre = !tl.ow&&(tl.side==='C'||travel[i-1].side!==tl.side); if(centre) box(0.12,0.01,z1m-z0m,M.yellow,tl.x-0.06,0.005,z0m,g); else for(let z=z0m;z<z1m-1;z+=3.5) box(0.12,0.01,2,M.white,tl.x-0.06,0.005,z,g); });
+  if(!S_.host) travel.forEach((tl,i)=>{ if(i===0) return; const centre = !tl.ow&&(tl.side==='C'||travel[i-1].side!==tl.side); if(centre) box(0.12,0.01,z1m-z0m,M.yellow,tl.x-0.06,0.005,z0m,g); else for(let z=z0m;z<z1m-1;z+=3.5) box(0.12,0.01,2,M.white,tl.x-0.06,0.005,z,g); });   // over a host deck the deck's markings run through
   bikes.forEach(b=>{ [b.x+0.04,b.x+b.w-0.14].forEach(x=>box(0.1,0.01,zb1-zb0,M.white,x,0.005,zb0,g));
     if(b.two){ // dividing line: 1.0 m dashes / 3.0 m gaps, solid for the 10 m before each pedestrian crossing (EDM §8.9.1.11)
       const s0=ends[0]?Math.min(zb0+IX.ddlSolid,zb1):zb0, s1=ends[1]?Math.max(zb1-IX.ddlSolid,zb0):zb1; const cx=b.x+b.w/2-0.05;
@@ -246,7 +294,7 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
     EI.forEach((e,i)=>{ if(e.type!=='cross') return; const el=EL[i]; const zEdge=i?ZB:ZA, sgn=i?1:-1; const arrives = b.two ? true : (b.dir>0 ? i===1 : i===0); if(!arrives) return;
       const x0 = b.two ? (i===1 ? b.x+b.w/2 : b.x) : b.x, w = b.two ? b.w/2 : b.w; const z=zEdge-sgn*el.bb0; box(w-.1,.01,IX.bikeBarW,M.white,x0+.05,.006,Math.min(z,z-sgn*IX.bikeBarW),g); });
     (S_.lanes[b.side]||[]).forEach(p=>{ if(p<2||p>LEN-2) return; for(let z=p-LW/2+.15;z<p+LW/2;z+=.6){ box(.3,.01,.3,M.white,b.x+.08,.006,z,g); box(.3,.01,.3,M.white,b.x+b.w-.38,.006,z,g);} }); });
-  park.forEach(pk=>{ for(let z=z0m+1;z<z1m;z+=6) box(pk.w,0.01,0.1,M.white,pk.x,0.005,z,g); });
+  if(!S_.host) park.forEach(pk=>{ for(let z=z0m+1;z<z1m;z+=6) box(pk.w,0.01,0.1,M.white,pk.x,0.005,z,g); });
   // ── intersection: crosswalks, stop bars, bicycle crossing, corner islands, signals (EDM 2026 §8.8.1.7, §8.9.1.8, §8.9.1.12) ──
   const cXL=sw[0].x+sw[0].w, cXR=sw[1].x;
   EI.forEach((e,i)=>{ if(e.type!=='cross') return; const zEdge=i?ZB:ZA, sgn=i?1:-1; const el=EL[i]; const zIn=d=>zEdge-sgn*d;   // zIn(d): d metres from the curb line into the block

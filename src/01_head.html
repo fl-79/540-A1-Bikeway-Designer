@@ -160,6 +160,96 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 .prosCons p.con::before{content:'−';position:absolute;left:0;color:var(--red);font-weight:700}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink3)}
 ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#D0D5DD;border-radius:8px}
+/* v3: project panel, proposals, layers, statistics, photos, modals */
+.panel{position:absolute;left:12px;top:12px;width:312px;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:10px 12px;font-size:12px;z-index:4}
+.panel h4{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
+.panel h4 input{flex:1;min-width:0;border:1px solid transparent;padding:3px 6px;font-weight:500;background:transparent}
+.panel h4 input:hover,.panel h4 input:focus{border-color:var(--line2);background:#fff}
+.panel h4 button{padding:2px 5px}
+.plist{margin:6px 0;max-height:190px;overflow:auto}
+.prow{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer}
+.prow:hover{background:#F8FAFC}.prow.active{background:#FDF4FF;outline:1px solid #E9D5FF}
+.prow .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.prow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.prow small{color:var(--ink3);white-space:nowrap}.prow button{padding:1px 5px}
+.modes{display:flex;gap:4px;margin:6px 0}
+.modes button{flex:1;font-size:11.5px;padding:5px 6px}
+.modes button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.acts2{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.acts2 button{font-size:11px;padding:4px 8px}.acts2 button.danger{color:var(--red);border-color:#FECACA}
+.toast{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);background:rgba(15,23,42,.9);color:#fff;padding:7px 14px;border-radius:999px;font-size:12px;display:none;z-index:8;max-width:70%;text-align:center}
+.legend label.lay{display:flex;align-items:center;gap:6px;font-size:11px;margin:3px 0;cursor:pointer}
+.legend label.lay input{margin:0}
+.legend canvas{width:18px;height:18px}
+.card.stats{width:390px;max-height:calc(100% - 32px);overflow:auto}
+.stats .big{font-size:30px;font-weight:700;font-family:var(--mono);line-height:1}
+.stats .sc{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:8px 0}
+.stats .sc div{background:#F8FAFC;border-radius:8px;padding:6px 8px}
+.stats .sc b{display:block;font-size:10.5px;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em}
+.stats .sc span{font-family:var(--mono);font-size:14px}
+.stats .kv{margin:6px 0}
+.pstrip{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.pstrip .thumb{width:96px;height:64px;flex:none;border-radius:6px;background:#EEF2F6;overflow:hidden;display:grid;place-items:center}
+.pstrip .thumb img{width:100%;height:100%;object-fit:cover}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;z-index:50;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.modal .box{width:min(780px,92vw);max-height:86vh;overflow:auto;background:#fff;border-radius:12px;padding:20px 24px;font-size:13px;line-height:1.5;position:relative}
+.modal h2{font-size:16px;margin-bottom:8px}.modal h3{font-size:13px;margin:14px 0 4px}
+.modal p,.modal li{margin:4px 0}.modal ul,.modal ol{padding-left:18px}
+.modal .x{position:absolute;right:12px;top:12px}
+.modal table{border-collapse:collapse;width:100%;margin:6px 0}.modal td,.modal th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top;font-size:12px}
+.modal .form2 label{display:block;font-size:11px;color:var(--ink2);margin:8px 0 3px}.modal .form2 input{width:100%}
+.photo{margin:0 0 10px}.photo img{width:100%;border-radius:8px;display:block;background:#EEF2F6;min-height:40px}
+.photo .cap{font-size:11px;color:var(--ink2);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between}
+.photo a{color:var(--accent)}
+.bw-edit .erow2{display:grid;grid-template-columns:14px 1fr 66px;gap:6px;align-items:center;padding:2px 0;font-size:11.5px}
+.bw-edit input{width:64px;padding:3px 5px;font-family:var(--mono);font-size:11.5px}
+#prop-note{color:var(--ink2)}
+.bscore{flex:1;min-height:0;overflow:auto;padding:10px 14px}
+.bottom.collapsed .bscore{display:none!important}
+.bscore .scorein{column-count:3;column-gap:22px;column-rule:1px solid var(--line)}
+.bscore .scorein>*{break-inside:avoid}
+.bscore .stats-photos .pstrip{break-inside:avoid}
+.btabs{z-index:1}.btabs button{padding:4px 10px;font-size:12px}
+/* the before / after divider: a clear bar with a grip, draggable */
+.split .divider{background:var(--line2);cursor:col-resize;position:relative;z-index:3}
+.split .divider::before{content:'';position:absolute;left:1px;top:0;bottom:0;width:6px;background:#fff;border-left:1px solid var(--ink3);border-right:1px solid var(--ink3)}
+.split .divider::after{content:'';position:absolute;left:50%;top:50%;width:2px;height:36px;margin:-18px 0 0 -1px;border-radius:2px;background:var(--ink3)}
+.split .pane+.pane{border-left:none}
+.prow .eye{padding:0 4px;font-size:12px;opacity:.7}.prow .eye:hover{opacity:1}
+.prow.hid .nm,.prow.hid small{opacity:.45;text-decoration:line-through}
+.pnav{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);background:#FDF4FF;border:1px solid #E9D5FF;border-radius:999px;padding:3px 6px 3px 10px;margin-left:8px}
+.pnav b{color:#86198F}.pnav button{padding:2px 8px;font-size:12px}.pnav button.wide{font-size:11px}
+#c-blocks{max-height:150px;overflow:auto;margin:8px 0;font-size:12px}
+#c-blocks div{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px dashed var(--line)}
+#c-blocks span{color:var(--ink3);white-space:nowrap}
+/* v3: the street panel on the left of the design screen — Street View on top, the existing configuration below; collapses to a tab */
+/* the street panel runs the full height of the left side (viewport and bottom panel sit to its right), the way a map or
+   design app's sidebar does; it never collides with the bottom panel */
+.body{flex-direction:row}
+.bottom{container-type:inline-size}
+.bottom .bhead{height:auto;min-height:38px;flex-wrap:wrap;padding:4px 14px;row-gap:4px}
+@container (max-width: 980px){ .bottom .bcols{grid-template-columns:1fr 1fr;overflow:auto} .bottom .sec:nth-child(2){border-right:none} }
+.main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
+.side{width:352px;flex-shrink:0;position:relative;background:var(--panel);border-right:1px solid var(--line2);box-shadow:2px 0 6px rgba(16,24,40,.05);display:flex;flex-direction:column;transition:width .18s;z-index:3}
+.side.collapsed{width:28px}
+.side .sidein{flex:1;min-height:0;overflow:auto}
+.side.collapsed .sidein{display:none}
+.sidetab{position:absolute;top:10px;right:-13px;width:26px;height:26px;border-radius:50%;background:#fff;border:1px solid var(--line2);box-shadow:var(--shadow);z-index:4;cursor:pointer;display:grid;place-items:center;font-size:10px;color:var(--ink2);user-select:none}
+.sidetab:hover{color:var(--ink);border-color:var(--ink3)}
+.side.collapsed .sidetab{right:-13px}
+.side.collapsed::after{content:'Street & existing configuration';position:absolute;left:50%;top:60px;transform:translateX(-50%) rotate(90deg);transform-origin:center;white-space:nowrap;font-size:11px;color:var(--ink3);letter-spacing:.04em;margin-top:70px}
+.side .sec{border-right:none;padding:10px 12px}
+.svwin{display:flex;flex-direction:column;border-bottom:1px solid var(--line);background:#fff}
+.svwin.min .svbody,.svwin.min .svfoot{display:none}
+.svhead{display:flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;background:#F8FAFC;border-bottom:1px solid var(--line);font-size:12px;user-select:none;flex-shrink:0}
+.svhead .svt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.svhead a{color:var(--accent);text-decoration:none;font-size:14px;padding:0 4px}
+.svhead button{padding:0 6px;font-size:12px;line-height:20px}
+.svbody{height:230px;flex:none;background:#EEF2F6;position:relative}
+.svbody iframe,.svbody img{position:absolute;inset:0;width:100%;height:100%;border:0;object-fit:cover}
+.svbody .svmsg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:12px;font-size:12px;color:var(--ink2)}
+.svfoot{font-size:11px;color:var(--ink2);padding:5px 12px;border-top:1px solid var(--line);background:#fff;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -174,8 +264,12 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 
 <div id="screen-map" class="active">
   <canvas id="map"></canvas>
-  <div class="hint">Click a street block to design a bike lane · click an existing bikeway for its details</div>
+  <div class="hint" id="maphint">Click street blocks to build a proposal · + adds, − removes · click a bikeway for its details</div>
+  <div class="panel" id="proj"></div>
+  <div class="toast" id="toast"></div>
+  <input type="file" id="proj-file" accept=".json,application/json" style="display:none">
   <div class="legend">
+    <div id="leg-exist">
     <div class="label">Existing bikeways</div>
     <div class="item"><span class="sw" style="border-top:4px solid #15803D"></span>Protected bike lane · AAA</div>
     <div class="item"><span class="sw" style="border-top:4px solid #22C55E"></span>Protected bike lane</div>
@@ -183,9 +277,13 @@ header .sub{font-size:11.5px;color:var(--ink2)}
     <div class="item"><span class="sw" style="border-top:3px solid #86EFAC"></span>Local street bikeway</div>
     <div class="item"><span class="sw" style="border-top:3px dotted #4D7C0F"></span>Shared lane</div>
     <div class="item" style="margin-top:8px"><span class="sw" style="border-top:2px solid #C4C9D1"></span>Street (no facility)</div>
-    <div class="item"><span class="sw" style="border-top:4px solid #F59E0B"></span>Selected block</div>
+    <div class="item"><span class="sw" style="border-top:4px solid #F59E0B"></span>Selected block · route start</div>
+    </div>
+    <div id="leg-dyn"></div>
+    <div id="leg-layers"></div>
   </div>
   <div class="maphelp">Scroll or double-click to zoom · Drag to pan</div>
+  <div class="card stats" id="stats"></div>
   <div class="maptip" id="maptip"></div>
   <div class="mapzoom"><button id="mz-in">+</button><button id="mz-out">−</button><button id="mz-fit" title="Fit city">⌂</button></div>
   <div class="card" id="card">
@@ -194,27 +292,56 @@ header .sub{font-size:11.5px;color:var(--ink2)}
     <div id="c-case" class="small"></div>
     <div class="kv" id="c-kv"></div>
     <div id="c-ctx" class="small"></div>
-    <button class="primary" id="c-design" style="width:100%;margin-top:10px">Design bike lane on this block →</button>
+    <div id="c-blocks" style="display:none"></div>
+    <button id="c-design1" style="width:100%;margin-top:10px;display:none">Design this block only →</button>
+    <button class="primary" id="c-design" style="width:100%;margin-top:6px">Design bike lane on this block →</button>
+    <button id="c-prop" style="width:100%;margin-top:6px">+ Add to proposal</button>
   </div>
 </div>
 
 <div id="screen-design">
   <div class="topbar">
     <span class="title" id="d-title">—</span><span class="tag" id="d-tag"></span>
+    <span class="pnav" id="pnav" style="display:none"></span>
     <div class="grow"></div>
+    <button class="small" id="btn-verify" title="Check lanes, parking and the existing facility against a street photo">📷 Verify street</button>
     <div class="tabs" id="tabs"><button data-v="3d" class="active">3D</button><button data-v="plan">Plan</button><button data-v="sec">Section</button></div>
-    <span class="toggle" id="tg-before"><i></i>Show before</span>
+    <span class="toggle on" id="tg-before"><i></i>Show before</span>
     <span class="toggle" id="tg-anim"><i></i>Animate</span>
     <span class="toggle on" id="tg-ctx"><i></i>City context</span>
     <span class="toggle on" id="tg-edit" title="Show the width handles and element selection in Plan and Section"><i></i>Edit in view</span>
     <span class="toggle on" id="tg-ann" title="Street names, existing-traffic labels, dimensions and element names in 3D, plan and section (north arrow and scale bar always stay)"><i></i>Annotations</span>
   </div>
   <div class="body">
+    <div class="side" id="side">
+      <div class="sidetab" id="side-tab" title="Collapse / expand the street panel">◀</div>
+      <div class="sidein">
+        <div class="svwin" id="svwin"><div class="svhead" id="svhead"><span class="svt" id="sv-title">Street view</span><button class="ghost" id="sv-flip" title="Turn round: look the other way along the block">↻</button><a id="sv-open" href="#" target="_blank" rel="noopener" title="Open in Google Maps">↗</a><button class="ghost" id="sv-min" title="Collapse / expand the panorama">▾</button></div><div class="svbody" id="sv-body"></div><div class="svfoot" id="sv-foot"></div></div>
+        <div class="sec" id="xsec"><h4>Existing configuration <span class="tag info">inferred · editable</span></h4>
+          <div class="photo" id="photo"></div>
+          <div class="form">
+            <div><label>Curb-to-curb (m)</label><input type="number" id="x-ctc" step="0.1"></div>
+            <div><label>Travel lanes (total)</label><select id="x-lanes"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>
+            <div><label>Parking <span id="x-lL"></span></label><select id="x-pL"><option value="1">Yes</option><option value="0">No</option></select></div>
+            <div><label>Parking <span id="x-lR"></span></label><select id="x-pR"><option value="1">Yes</option><option value="0">No</option></select></div>
+            <div style="grid-column:1/-1"><label>Existing bike facility <span class="muted" id="x-facrec"></span></label><select id="x-fac" title="What is on the street today; the design case (new / upgrade / make permanent) and the before view follow"><option value="auto">as recorded</option><option value="none">none</option><option value="shared">sharrows (shared lane markings)</option><option value="local">local-street bikeway (traffic-calmed, shared)</option><option value="NB">painted lane, no buffer</option><option value="PBT">painted lane, buffer on the traffic side</option><option value="PBP">painted lane, buffer on the parking side</option><option value="PBPT">painted lane, buffers both sides</option><option value="SL">protected lane, street level (curb / posts / planters)</option><option value="R">raised protected lane</option></select></div>
+            <div><label>Lane direction</label><select id="x-dir"><option value="2W">one lane each side</option><option value="Bidirectional">two-way lane, one side</option><option value="OW">one-way lane, one side</option></select></div>
+            <div><label>Which side (one-side lanes)</label><select id="x-side"><option value="auto">as mapped (OSM)</option><option value="L">W / N side</option><option value="R">E / S side</option></select></div>
+            <div><label>Bus / truck route</label><select id="x-bus"><option value="0">No</option><option value="1">Yes</option></select></div>
+            <div><label>AADT (veh/day)</label><input type="number" id="x-aadt" placeholder="unknown"></div>
+          </div>
+          <div class="small muted" style="margin-top:6px"><b>Bus / truck route:</b> buses and trucks need wider lanes — curb lanes 3.2 m minimum instead of 3.0 m, a single lane 3.5 m (EDM Table 8-10); inferred from the City's bus and truck route layers. Switch it off if no route runs on this block.</div>
+          <div class="small muted" id="sw-note" style="margin-top:6px">Sidewalk + boulevard fixed at 3.6 m each side — property lines cannot change.</div>
+          <div class="bw-edit" id="bw-edit"></div>
+        </div>
+      </div>
+    </div>
+   <div class="main">
     <div class="viewport" id="vp">
-      <div class="split" id="split3d"><div class="pane" id="p3d-b" style="display:none"><span class="badge before">EXISTING</span></div><div class="pane" id="p3d-a"><span class="badge after" id="b3d">PROPOSED</span></div></div>
+      <div class="split" id="split3d"><div class="pane" id="p3d-b" style="display:none"><span class="badge before">EXISTING</span></div><div class="divider" title="Drag to resize the two views"></div><div class="pane" id="p3d-a"><span class="badge after" id="b3d">PROPOSED</span></div></div>
       <canvas id="c3d" style="z-index:1"></canvas>
-      <div class="split" id="splitplan" style="display:none"><div class="pane" id="pp-b" style="display:none"><canvas id="plan-b"></canvas><span class="badge before">EXISTING</span></div><div class="pane" id="pp-a"><canvas id="plan-a"></canvas><span class="badge after" id="bplan">PROPOSED</span></div></div>
-      <div class="split" id="splitsec" style="display:none"><div class="pane" id="ps-b" style="display:none"><canvas id="sec-b"></canvas><span class="badge before">EXISTING</span></div><div class="pane" id="ps-a"><canvas id="sec-a"></canvas><span class="badge after" id="bsec">PROPOSED</span></div></div>
+      <div class="split" id="splitplan" style="display:none"><div class="pane" id="pp-b" style="display:none"><canvas id="plan-b"></canvas><span class="badge before">EXISTING</span></div><div class="divider" title="Drag to resize the two views"></div><div class="pane" id="pp-a"><canvas id="plan-a"></canvas><span class="badge after" id="bplan">PROPOSED</span></div></div>
+      <div class="split" id="splitsec" style="display:none"><div class="pane" id="ps-b" style="display:none"><canvas id="sec-b"></canvas><span class="badge before">EXISTING</span></div><div class="divider" title="Drag to resize the two views"></div><div class="pane" id="ps-a"><canvas id="sec-a"></canvas><span class="badge after" id="bsec">PROPOSED</span></div></div>
       <div class="vhint" id="vhint">Drag to orbit · Scroll to zoom · Double-click to reset</div>
       <div class="props pop" id="pop"></div>
       <input class="inl" id="inl" type="text" inputmode="decimal" spellcheck="false">
@@ -223,22 +350,15 @@ header .sub{font-size:11.5px;color:var(--ink2)}
       <div class="bhead">
         <button class="ghost small" id="btn-collapse">▾ Hide panel</button>
         <div class="opts" id="opt-chips"></div>
-        <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button>
+        <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button><button class="small primary" id="btn-prop" title="Keep this block's design in the active proposal on the map">Save to proposal</button><span class="small" id="prop-note"></span>
         <span class="status" id="status"></span>
         <div class="grow"></div><span class="small muted" id="dir-note"></span>
+        <div class="tabs btabs"><button id="bt-design" class="active" title="Existing configuration summary, section editor, compliance, recommendations">Design</button><button id="bt-score" title="Bike score and statistics of the proposal this block belongs to">Bike score</button></div>
       </div>
-      <div class="bcols">
-        <div class="sec"><h4>Existing configuration <span class="tag info">inferred · editable</span></h4>
-          <div class="form">
-            <div><label>Curb-to-curb (m)</label><input type="number" id="x-ctc" step="0.1"></div>
-            <div><label>Travel lanes (total)</label><select id="x-lanes"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>
-            <div><label>Parking <span id="x-lL"></span></label><select id="x-pL"><option value="1">Yes</option><option value="0">No</option></select></div>
-            <div><label>Parking <span id="x-lR"></span></label><select id="x-pR"><option value="1">Yes</option><option value="0">No</option></select></div>
-            <div><label>Bus / truck route</label><select id="x-bus"><option value="0">No</option><option value="1">Yes</option></select></div>
-            <div><label>AADT (veh/day)</label><input type="number" id="x-aadt" placeholder="unknown"></div>
-          </div>
-          <div class="small muted" id="sw-note" style="margin-top:6px">Sidewalk + boulevard fixed at 3.6 m each side — property lines cannot change.</div>
-          <h4 style="margin-top:12px">Option summary</h4><div class="prosCons" id="summary"></div>
+      <div class="bscore stats" id="bscore" style="display:none"></div>
+      <div class="bcols" id="bcols">
+        <div class="sec"><h4>Option summary</h4><div class="prosCons" id="summary"></div>
+          <div class="small muted" style="margin-top:10px">The existing street (lanes, parking, facility, widths) is edited in the <b>street panel</b> on the left — ◀ collapses it, ▶ or 📷 brings it back.</div>
         </div>
         <div class="sec editor"><h4>Design the section <span class="small muted mono" id="ed-total"></span></h4>
           <div class="steps">
@@ -257,7 +377,29 @@ header .sub{font-size:11.5px;color:var(--ink2)}
         <div class="sec"><h4>Recommendations</h4><div id="recs"></div></div>
       </div>
     </div>
+   </div>
   </div>
 </div>
 </div>
+<div class="modal" id="settings"><div class="box" style="width:min(520px,92vw)"><button class="ghost x" data-act="close">✕</button><h2>Settings · street photos</h2>
+  <p class="muted">Both services are used only to <i>look</i> at a street; nothing from them is copied into the tool's data. Keys are kept in this browser only.</p>
+  <div class="form2"><label>Mapillary client token <span class="muted">— free: sign in at mapillary.com → Developers → Register application → copy the <i>Client Token</i></span></label><input id="set-mly" type="text" placeholder="MLY|…" spellcheck="false">
+  <label>Google Maps Platform API key (optional) <span class="muted">— embeds the Street View panorama in the panel (Maps Embed API, free); without it the panel links to Street View</span></label><input id="set-gkey" type="text" placeholder="AIza…" spellcheck="false"></div>
+  <div class="row" style="margin-top:14px;justify-content:flex-end;gap:8px"><button data-act="close">Cancel</button><button class="primary" data-act="saveset">Save</button></div></div></div>
+<div class="modal" id="method"><div class="box"><button class="ghost x" data-act="close">✕</button><h2>Bike score — methodology and references</h2>
+  <p>The tool's bike score follows <b>Bike Score®</b>, the bikeability measure developed by Walk Score with Meghan Winters (SFU), Michael Brauer and Kay Teschke (UBC) — the tool listed on UBC's <i>Cycling in Cities</i> page — and validated against cycling behaviour in 24 Canadian and US cities (Winters et al. 2016). Bike Score rates a place 0–100 from four equally weighted parts: <b>bike lanes</b>, <b>hills</b>, <b>destinations and road connectivity</b>, and <b>bike-commute mode share</b>. The tool reproduces the first three on a 100 m grid over Vancouver and leaves out mode share, which is a census outcome a design cannot change, so each remaining part weighs one third.</p>
+  <h3>1 · Bike lanes (one third)</h3><p>Bike Score sums nearby bikeway length with a distance decay (nothing beyond 1,000 m), counting paths at twice a painted lane and three times a shared route, and excludes sharrows. Here every bikeway in the City's layer (plus OpenStreetMap cycleways) is sampled every 25 m, weighted 3 for off-street paths and protected lanes, 1.5 for painted lanes, 1 for local-street bikeways and 0 for sharrows, and summed for each cell with a linear decay to zero at 1,000 m. Bike Score normalises "against an average of the highest scores"; the tool takes the mean of the top 2 % of cells as 100 and applies a square root, so the first lanes near a place count more than the tenth. <b>A proposal adds its blocks to this part as protected lanes (weight 3, less anything already there), and the change is what its statistics report.</b></p>
+  <h3>2 · Hills (one third)</h3><p>Bike Score uses the steepest grade within 200 m, scoring 2 % as 100 and 10 % as 0. The tool computes grades from the City's 1 m contour lines on a 20 m grid (smoothed over 100 m, the grade a cyclist feels rather than a 20 m bump), takes the steepest within 200 m of each cell, and maps 2–10 % to 100–0. The proposal's own grades (average, steepest 20 m, metres over 5 %) are reported separately against the AAA guidance of the BC Active Transportation Design Guide (keep under 3 %; 3–5 % acceptable for short lengths; over 5 % needs extra width).</p>
+  <h3>3 · Destinations and connectivity (one third)</h3><p>Bike Score uses "a modified Walk Score": the network distance to a diverse set of amenities and the road connectivity (intersection density, block length). The tool uses Walk Score's published category weights — grocery 3; restaurants and bars 10 slots (.75, .45, .25, .25, .225 × 4, .2 × 2); shopping 5 slots (.5, .45, .4, .35, .3); coffee 1.25 and .75; banks, parks, schools, libraries/bookshops and entertainment 1 each (15 points in all) — counting the nearest amenities first with Walk Score's own distance thresholds (full credit to 400 m, none beyond 1,600 m): the modification Bike Score applies is not published, and bicycle-scale distances saturate in a city this dense, so every cell would score the same. A Walk Score connectivity penalty of up to 5 % applies where there are fewer than 60 intersections per km² within 800 m, and up to 5 % where blocks average over 150 m. Amenities come from OpenStreetMap (8,281 places in the city); distances are straight-line, not network.</p>
+  <h3>Score bands</h3><table><tr><th>Score</th><th>Bike Score band</th></tr><tr><td>90–100</td><td>Biker's Paradise — daily errands can be done by bike</td></tr><tr><td>70–89</td><td>Very Bikeable — cycling is convenient for most trips</td></tr><tr><td>50–69</td><td>Bikeable — some bike infrastructure</td></tr><tr><td>0–49</td><td>Somewhat Bikeable — minimal bike infrastructure</td></tr></table>
+  <h3>What the tool reports for a proposal</h3><ul><li><b>Bike score around the proposal</b>: the mean over the grid cells within 400 m of its blocks, before (existing network) and after (with every proposal in the project), with the three parts.</li><li><b>Citywide</b>: the mean over all scored cells before and after, and how many cells gain a point or more.</li><li><b>Connectivity</b>: how many ends of the proposal meet the AAA network, another facility, another block of the proposal, or nothing (a loose end).</li><li><b>Destinations</b>: places within 400 m (a two-minute ride) by category.</li><li><b>Grades</b> along the proposal, from the contour grid.</li></ul>
+  <h3>Departures from Bike Score, stated plainly</h3><ul><li>Mode share is left out (three parts, not four).</li><li>Distances to amenities are straight-line; Bike Score / Walk Score use network distance.</li><li>Walk Score's walking thresholds are used unmodified for amenities, and the square-root lane scaling is the tool's choice; both are documented in <code>scripts/score.py</code> and can be changed there.</li><li>Cells with no street within 150 m (water, port, park interiors) carry no score.</li></ul>
+  <h3>References</h3><ul>
+  <li>Walk Score. <i>Bike Score Methodology</i>. <a href="https://www.walkscore.com/bike-score-methodology.shtml" target="_blank" rel="noopener">walkscore.com/bike-score-methodology.shtml</a>; <i>Walk Score Methodology</i>. <a href="https://www.walkscore.com/methodology.shtml" target="_blank" rel="noopener">walkscore.com/methodology.shtml</a></li>
+  <li>Winters M, Teschke K, Brauer M, Fuller D (2016). Bike Score®: Associations between urban bikeability and cycling behavior in 24 cities. <i>International Journal of Behavioral Nutrition and Physical Activity</i> 13:18. <a href="https://doi.org/10.1186/s12966-016-0339-0" target="_blank" rel="noopener">doi:10.1186/s12966-016-0339-0</a></li>
+  <li>Winters M, Brauer M, Setton EM, Teschke K (2013). Mapping bikeability: a spatial tool to support sustainable travel. <i>Environment and Planning B</i> 40(5):865–883 — the UBC bikeability index that preceded Bike Score.</li>
+  <li>UBC Cycling in Cities. <i>Tools &amp; Training</i>. <a href="https://cyclingincities.spph.ubc.ca/motivating-cycling/tools-training/" target="_blank" rel="noopener">cyclingincities.spph.ubc.ca</a></li>
+  <li>British Columbia Ministry of Transportation (2019). <i>BC Active Transportation Design Guide</i>, chapter on grades for AAA routes. City of Vancouver, <i>Engineering Design Manual</i> 2026, §8.5.</li>
+  <li>Data: City of Vancouver Open Data (bikeways, streets, 1 m contours); OpenStreetMap contributors, ODbL (amenities, cycleways, bike parking).</li></ul>
+</div></div>
 <script>

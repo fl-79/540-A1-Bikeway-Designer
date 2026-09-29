@@ -32,7 +32,14 @@ const endIdxNear=(o,p)=>{ const a=o.g[0], b=o.g[o.g.length-1]; return Math.hypot
 // meets there at an angle — the deck it merges into (elevated), or the street it lands on (grade). A tagged level that
 // contradicts that is the tag lagging the road, and a ramp is never left hanging in the air.
 function nodeH(o,k){ const p=o.g[k?o.g.length-1:0]; const nb=endNeighbours(o,k); let h=lyAt(o,k);
-  if(nb.cont.length){ nb.cont.forEach(x=>{ h=Math.max(h, lyAt(x,endIdxNear(x,p))); }); }
+  if(nb.cont.length){
+    // v3: a structure LANDS where it runs on into a street with no level of its own (not a bridge by name or by OSM, no end tag):
+    // the node is at grade and the structure piece runs down to it — the Granville Bridge's 4th Avenue ramp lands on W 4th Ave,
+    // Granville St at Drake and Burrard St at Pacific stay on the ground — instead of the street being lifted to the deck and
+    // ramping down beyond the node. An end tagged elevated at the node (lyE) keeps its level, and every piece there agrees.
+    const at=x=>lyAt(x,endIdxNear(x,p)); const expl=x=>!!(x.osm&&x.osm.lyE); const all=[o,...nb.cont];
+    if(all.some(x=>!isUpSeg(x)&&!expl(x)) && !all.some(x=>expl(x)&&at(x)>0)) h=0;
+    else nb.cont.forEach(x=>{ h=Math.max(h, at(x)); }); }
   else if(nb.cross.length && !(o.osm&&o.osm.lyE)){ h=Math.min(h, ...nb.cross.map(x=>lyAt(x,endIdxNear(x,p)))); }   // an inherited level comes DOWN to what it lands on; an explicit end tag (lyE) is kept, so a deck is not pulled down by a street ending beneath it
   else if(!nb.cross.length && h>0){ // nothing within 14 m: a gap in the City's centrelines — join the nearest street end within 40 m, else come down to grade
     let best=null, bd=40; const [cx,cy]=[Math.round(p[0]/12),Math.round(p[1]/12)]; for(let i=-4;i<=4;i++) for(let j=-4;j<=4;j++) (END_INDEX.get((cx+i)+','+(cy+j))||[]).forEach(e=>{ if(e.s===o) return; const q=e.s.g[e.k?e.s.g.length-1:0]; const d=Math.hypot(q[0]-p[0],q[1]-p[1]); if(d<bd){ bd=d; best=e; } });
@@ -113,6 +120,7 @@ function designable(s){ if(s._dz) return s._dz; let reason=null;
   const name=s.n, last=s.s.split(' ').pop(), hw=(s.osm&&s.osm.hw)||'';
   if (hw==='motorway' || /TRANS CANADA/.test(name)) reason='Highway: a freeway-standard road; cycling is prohibited or served by a separate path';
   else if (/\bRAMP\b|ON-RAMP|OFF-RAMP/.test(name)) reason='Highway ramp: a merge / diverge leg with no frontage, not a street a bike lane can serve';
+  else if (isUpSeg(s)) reason='Bridge, viaduct or overpass: a fixed structure whose deck and ramps are drawn as they exist; a bike lane is designed on the streets at either end and the existing deck facility is kept';   // v3: structures are context, not design blocks
   else if (s.u==='Closed') reason='Closed street (Open Data class "Closed")';
   else if (s.u==='Leased') reason='Leased / private road (Open Data class "Leased"): not a public street';
   else if (s.u==='Recreational') reason='Park road (Open Data class "Recreational"): Park Board jurisdiction, the Engineering Design Manual street standards do not apply';
@@ -189,6 +197,8 @@ function segContext(s) {
   else if (one) { dirMode='one'; dirWhy = (one.end<0?'existing ':'connects to ')+'one-way '+one.t.toLowerCase()+' ('+one.name+')'; }
   const cross=[]; (s.cn||[]).forEach((end,i)=>end.forEach(c=>{ if(!c.same) cross.push({...c,end:i}); }));
   const bus=!!(s.bus||s.truck);
+  // v3: a block on a structure takes its carriageway from its lane count (structCtc), not from the right-of-way points
+  const ctcS=structCtc(s); if(ctcS!==s.ctc){ s.ctcOrig=s.ctc; s.ctc=ctcS; s.row=Math.max(s.row, Math.round((ctcS+3)*10)/10); }
   const swW=Math.max(1.8, Math.min(8, (s.row - s.ctc)/2));
   const G=blockGrade(s);
   return { seg:s, case:designCase(s), lbl, meters, pm, lanes, park, bus, aadt:null, oneway:!!s.ow, owd, swW, grade:G.grade, z0:G.za, z1:G.zb, stops:s.bst||{L:[],R:[]}, racks:s.rk||{L:0,R:0}, ctc:s.ctc, spd:s.spd, dirMode, dirWhy, cross, same, ln:s.ln||{L:[],R:[]}, tr:s.tr||{}, bl:s.bl||{} };
@@ -528,10 +538,14 @@ function clipPoly(g, B){ const out=[]; let cur=null;
   return out.filter(p=>p.length>1); }
 // existing street trees on a surrounding street (public-trees per block side: count, spacing, median height / trunk diameter;
 // no positions are published, so they are spaced evenly along the boulevard nearest the curb, the same rule as on the block)
-function streetTrees(st){ const tr=st.s.tr; if(!tr) return []; const m=st.m; const out=[]; const band=trimLine(st.g, st.trim?st.trim[0]:0, st.trim?st.trim[1]:0); if(band.length<2) return out;
-  const swW=Math.max(1.5,(st.row-m.ctc)/2);
-  ['L','R'].forEach(sd=>{ const t=tr[sd]; if(!t||!t.n) return; const sp=Math.max(6,t.sp||8); const off=(sd==='L'?-1:1)*(m.ctc/2+swW*0.3);
-    alongLine(offsetLine(band,off), sp, sp/2).forEach(([x,z])=>out.push({x,z,h:t.h||7,d:t.d||15})); });
+// v3: a tree is never placed on a carriageway — not on another street's (a divided road's twin, a ramp beside its street, an
+// intersection) and not on its own where the recorded curb-to-curb is too narrow for the real road (the tree sits at least
+// 4.5 m from the centreline, a lane and a half), and none on a structure
+function streetTrees(st, streets){ const tr=st.s.tr; if(!tr||st.up||st.lvl>0) return []; const m=st.m; const out=[]; const band=trimLine(st.g, st.trim?st.trim[0]:0, st.trim?st.trim[1]:0); if(band.length<2) return out;
+  const swW=Math.max(1.5,(st.row-m.ctc)/2); const half=Math.max(m.ctc/2, 4.5);
+  const onRoad=p=>(streets||[]).some(o=>o!==st && o.m && alongOnPoly(o.g,p)[0]<o.m.ctc/2+0.8);
+  ['L','R'].forEach(sd=>{ const t=tr[sd]; if(!t||!t.n) return; const sp=Math.max(6,t.sp||8); const off=(sd==='L'?-1:1)*(half+swW*0.3);
+    alongLine(offsetLine(band,off), sp, sp/2).forEach(([x,z])=>{ if(!onRoad([x,z])) out.push({x,z,h:t.h||7,d:t.d||15}); }); });
   return out; }
 // orient a polyline so it runs S→N (or W→E), like the street segments
 function fwdOrient(g){ const a=g[0], b=g[g.length-1]; const dx=b[0]-a[0], dy=b[1]-a[1]; const fwd = Math.abs(dy)>=Math.abs(dx) ? dy>=0 : dx>=0; return fwd ? g : g.slice().reverse(); }
@@ -543,7 +557,8 @@ function offsetLine(g, off){ const n=g.length; if(n<2) return g.slice(); const o
 //   returns [{off, w, kind, two, dir}]  off = lateral offset of the lane centre, kind: prot | paint | shared
 //   v2: the side comes from OpenStreetMap's cycleway:left / cycleway:right tags on the matched way where they exist (b.side,
 //   via facilitySide), then from continuity with an adjoining collinear piece, and only then from the type/direction guess.
-function facilitySide(seg){ const cw=seg&&seg.osm&&seg.osm.cw; if(!cw) return null; const yes=v=>!!v&&v!=='no'&&v!=='shoulder'; const L=yes(cw.L), R=yes(cw.R); return L&&!R?'L':R&&!L?'R':L&&R?'both':null; }
+function facilitySide(seg){ if(seg&&seg.bwSide) return seg.bwSide;   // v3: the side the user set for a one-side facility
+  const cw=seg&&seg.osm&&seg.osm.cw; if(!cw) return null; const yes=v=>!!v&&v!=='no'&&v!=='shoulder'; const L=yes(cw.L), R=yes(cw.R); return L&&!R?'L':R&&!L?'R':L&&R?'both':null; }
 function bikewayLanes(b, ctc, sideHint){ const t=b.t, d=b.d; const sd=(b.side==='L'||b.side==='R')?b.side:null;
   const half=ctc/2, prot=1.8, paint=1.5, buf=0.6;
   const has=sd=>{ const v=sd==='L'?b.es:b.wn; return v===undefined || (v && v!=='nan' && v!=='None'); };   // E/S-bound uses the L side, W/N-bound the R side
@@ -669,8 +684,74 @@ function endLegs(s,i){ const F=localFrame(s); const e=endInfo(s)[i]; const out={
   return out; }
 // deck height of an elevated context street at a point (its end / mid / end heights, straight between)
 function deckAtSt(st,x,z){ if(!st||!st.deck) return 0; const a=alongOnPoly(st.g,[x,z])[1], L=st.L||1;
+  if(st.prof&&st.prof.k){ const k=st.prof.k; if(a<=k[0][0]) return k[0][1]; for(let i=1;i<k.length;i++){ if(a<=k[i][0]){ const [a_,h_]=k[i-1], [b_,g_]=k[i]; return h_+(g_-h_)*((a-a_)/((b_-a_)||1)); } } return k[k.length-1][1]; }   // v3: a knotted profile (a deck landing at both ends: up, level, down)
   if(st.prof){ const {h0,a0,h1,a1}=st.prof; return a<=a0 ? h0 : a>=a1 ? h1 : h0+(h1-h0)*((a-a0)/((a1-a0)||1)); }   // level while on the deck, then one grade
   const [h0,hm,h1]=st.deck; return a<L/2 ? h0+(hm-h0)*(a/(L/2)) : hm+(h1-hm)*((a-L/2)/(L/2)); }
+// ── v3: one continuous structure surface — ramps taper into their deck, hosted pieces are not drawn twice ──────────────
+// A structure's drawn band: a bridge carries a sidewalk (up to 2.25 m a side), a one-way ramp only its parapet (0.6 m)
+function structBandW(st){ return st.m.ow ? st.m.ctc+1.2 : Math.min(st.row, st.m.ctc+4.5); }
+// a structure's carriageway width: the right-of-way points do not describe a deck (the Cambie carriageways are recorded at
+// 2.9 m, the Granville deck at 12.9 m), so an elevated piece takes lanes × 3.3 m + 0.6 m shoulders from its OSM lane count
+// (structlanes.py) where that is wider, and a piece under 6 m with no lane count one lane (one-way) or two
+function structCtc(s){ if(!isUpSeg(s)) return s.ctc; const ln=(s.osm&&s.osm.ln)||0; const med=(s.osm&&s.osm.div)?2.0:0;   // a divided deck carries a median between its carriageways
+  // v3: with a lane count the carriageway IS its lanes, wider or narrower than the right-of-way value (the Seymour and Howe ramps
+  // of the Granville Bridge are recorded at 17.2 m for two lanes); a one-way ramp with no count is two lanes (a viaduct keeps its value)
+  if(ln) return Math.round((ln*3.3+0.6+med)*10)/10; if(s.ctc<6) return Math.round(((s.ow?1:2)*3.3+0.6)*10)/10; if(s.ow&&s.ctc>9&&!/VIADUCT/.test(s.n)) return 7.2; return s.ctc; }
+function resampleLine(g,n){ if(g.length<2) return g; const L=[0]; for(let i=1;i<g.length;i++) L.push(L[i-1]+Math.hypot(g[i][0]-g[i-1][0],g[i][1]-g[i-1][1])); const T=L[L.length-1]; const out=[]; let j=1;
+  for(let k=0;k<n;k++){ const t=T*k/(n-1); while(j<g.length-1&&L[j]<t) j++; const a=g[j-1], b=g[j]; const u=(L[j]-L[j-1])>0?(t-L[j-1])/(L[j]-L[j-1]):0; out.push([a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u]); } return out; }
+function pointAlong(g,t){ let acc=0; for(let i=1;i<g.length;i++){ const a=g[i-1], b=g[i]; const d=Math.hypot(b[0]-a[0],b[1]-a[1]); if(acc+d>=t){ const u=d?(t-acc)/d:0; return [a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u]; } acc+=d; } return g[g.length-1]; }
+// which wider deck at the same level a structure's end k lies in (its carriageway, within 3 m): the deck it merges into
+function mergeDeckAt(streets, st, k){ const g=st.g; const p=g[k?g.length-1:0], q=g[k?g.length-2:1]; const hEnd=st.deck?st.deck[k?2:0]:0; const away=[q[0]-p[0],q[1]-p[1]], aL=Math.hypot(away[0],away[1])||1; let best=null;
+  // the direction a piece's body lies in from the node, for a piece with an end at the node
+  const bodyDir=o=>{ const a=alongOnPoly(o.g,p)[1], L=plen(o.g); if(a>=6&&a<=L-6) return null; const inw=pointAlong(o.g, a<6?Math.min(L,12):Math.max(0,L-12)); const v=[inw[0]-p[0],inw[1]-p[1]], vL=Math.hypot(v[0],v[1])||1; return [v[0]/vL,v[1]/vL]; };
+  // v3: a ramp that forks off a ramp of the same width (the Granville Bridge's southbound ramp splits into the Fir St and 4th
+  // Avenue ramps) merges into the piece beyond the node when it has a sibling there — another piece leaving on its side
+  const hasSibling=()=>streets.some(x=>{ if(x===st||!x.deck||x.host2) return false; const q=x.g[0], r=x.g[x.g.length-1]; if(Math.hypot(q[0]-p[0],q[1]-p[1])>6&&Math.hypot(r[0]-p[0],r[1]-p[1])>6) return false; const bd=bodyDir(x); return !!bd && (bd[0]*away[0]+bd[1]*away[1])/aL>0.3; });
+  streets.forEach(o=>{ if(o===st||!o.deck||o.host2) return; const wider=o.m.ctc>st.m.ctc+0.5; if(!wider&&Math.abs(o.m.ctc-st.m.ctc)>0.5) return; const d=nearOnPoly(p,o.g)[0]; if(d>o.m.ctc/2+3) return; if(Math.abs(deckAtSt(o,p[0],p[1])-hEnd)>1.5) return;
+    // v3: at a node where two deck pieces meet, the ramp runs on from the one whose body lies beyond the node (the piece its
+    // traffic shares — an off-ramp's deceleration lane lies on the deck before the split, an on-ramp's merge on the deck after it)
+    let score=1.5; const bd=bodyDir(o); if(bd) score=-(bd[0]*away[0]+bd[1]*away[1])/aL;
+    if(!wider && !(score>0.3 && hasSibling())) return;
+    const key=score*10-d; if(!best||key>best.key) best={o,key}; });
+  return best?best.o:null; }
+// the left / right edges of a structure at half-width hw. At an end that merges into a deck the centreline is run on to the
+// deck's centreline (so the piece never stops at the deck's edge with a step) and the OUTER edge is replaced by a quadratic
+// curve tangent to the ramp's edge and to the deck's edge (halfDeck(o) gives the deck's half-width for this edge kind): the
+// join tapers like a real gore, the inner edge disappears inside the deck.
+// offset a polyline by an offset that varies along it (offAt(a), a = metres from the start), resampled every 4 m so a taper is smooth
+function offsetLineVar(g, offAt){ const gg=resampleLine(g, Math.max(2, Math.ceil(plen(g)/4)+1)); const n=gg.length; const out=[]; let acc=0;
+  for(let i=0;i<n;i++){ if(i) acc+=Math.hypot(gg[i][0]-gg[i-1][0],gg[i][1]-gg[i-1][1]); const p=gg[i]; const a=gg[Math.max(0,i-1)], b=gg[Math.min(n-1,i+1)]; let dx=b[0]-a[0], dz=b[1]-a[1]; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L; const off=offAt(acc); out.push([p[0]+dz*off, p[1]-dx*off]); } return out; }
+// the half-width of a structure along its length: its own width, tapering over 40 m to the width of the narrower piece it
+// continues into at either end (a lane drop or an added lane is a taper on the wider piece, never a step at the node —
+// TAC / AASHTO merge geometry; 40 m is the taper a 3.3 m lane takes at the tool's scale)
+const TAPER_L=50;   // a 3.3 m lane dropped over 50 m (~15:1; TAC / AASHTO give 50:1–70:1 at freeway speed, 15:1–25:1 at the 50 km/h of the city's bridges)
+function widthFn(st, hw, targets){ return a=>{ let w=hw; const L=st.L||plen(st.g);
+  [0,1].forEach(k=>{ const t=targets[k]; if(t==null||t>=hw-0.2) return; const d=k?L-a:a; if(d<TAPER_L) w=Math.min(w, t+(hw-t)*Math.max(0,d)/TAPER_L); }); return w; }; }
+function structEdges(st, hw, halfDeck, hwFn){ const g=st.gx||st.g; const ext0=st.ext0||0; const Lf=st.L||plen(st.g); const wOf=f=>f?(a=>f(clamp(a-ext0,0,Lf))):(()=>hw); const wL=wOf(hwFn&&hwFn.L?hwFn.L:hwFn), wR=wOf(hwFn&&hwFn.R?hwFn.R:hwFn);   // v3: a width function per side (no taper on the side a ramp joins)
+  let L=offsetLineVar(g,a=>-wL(a)), R=offsetLineVar(g,a=>wR(a)); let taper=false; const merges=[];
+  [0,1].forEach(k=>{ const o=st.merge&&st.merge[k]; if(!o) return; const dh=halfDeck(o);
+    const gk=k?g:g.slice().reverse(); let Lk=k?L:L.slice().reverse(), Rk=k?R:R.slice().reverse(); const n=gk.length; const p=gk[n-1];
+    const total=plen(gk); if(total<25) return;
+    const back=t=>pointAlong(gk.slice().reverse(), t);   // t metres back from the merge end, on the centreline
+    const bp=back(12); const dOff=[Lk,Rk].map(E=>nearOnPoly(pointAlong(E.slice().reverse(),12),o.g)[0]); const outerL=dOff[0]>dOff[1]; const E=outerL?Lk:Rk;
+    const cand=[offsetLine(o.g,-dh), offsetLine(o.g,dh)]; const ep=pointAlong(E.slice().reverse(),12); const ED=nearOnPoly(ep,cand[0])[0]<nearOnPoly(ep,cand[1])[0]?cand[0]:cand[1];
+    // A: on the outer edge, the last point (coming from the far end) still clear of the deck's band, at least 10 m back
+    const Erev=E.slice().reverse(); const EL=plen(E); let tA=10; for(let t=10;t<Math.min(EL-4,80);t+=2){ if(nearOnPoly(pointAlong(Erev,t),o.g)[0]>dh+3){ tA=t; break; } } const A=pointAlong(Erev,tA);
+    // r: the ramp's direction into the node; u: the deck's direction there, turned to run with r; B: on the deck edge 30 m on
+    const q=back(6); const rL=Math.hypot(p[0]-q[0],p[1]-q[1])||1; const r=[(p[0]-q[0])/rL,(p[1]-q[1])/rL];
+    const aP=alongOnPoly(o.g,p)[1]; const q1=pointAlong(o.g,Math.max(0,aP-3)), q2=pointAlong(o.g,Math.min(plen(o.g),aP+3)); let u=[q2[0]-q1[0],q2[1]-q1[1]]; const uL=Math.hypot(u[0],u[1])||1; u=[u[0]/uL,u[1]/uL]; if(u[0]*r[0]+u[1]*r[1]<0) u=[-u[0],-u[1]];
+    const aB=alongOnPoly(ED,pointAlong(o.g,aP))[1]; const dirB=(u[0]*(ED[ED.length-1][0]-ED[0][0])+u[1]*(ED[ED.length-1][1]-ED[0][1]))>=0?1:-1; const MERGE_L=60; const B=pointAlong(ED, clamp(aB+dirB*MERGE_L, 0, plen(ED)));   // the acceleration / deceleration lane closes over 60 m (parallel-type ramp terminal, TAC ch. 10 / AASHTO ch. 10, at 50 km/h)
+    // C: where the two tangents meet (fallback: midway)
+    const den=r[0]*(-u[1])-r[1]*(-u[0]); let C; if(Math.abs(den)>1e-6){ const dx=B[0]-A[0], dy=B[1]-A[1]; const s1=(dx*(-u[1])-dy*(-u[0]))/den; C=[A[0]+r[0]*s1, A[1]+r[1]*s1]; if(s1<0||Math.hypot(C[0]-A[0],C[1]-A[1])>120) C=null; } if(!C) C=[(A[0]+B[0])/2,(A[1]+B[1])/2];
+    const bez=[]; for(let i=1;i<=10;i++){ const t=i/10; bez.push([(1-t)*(1-t)*A[0]+2*(1-t)*t*C[0]+t*t*B[0], (1-t)*(1-t)*A[1]+2*(1-t)*t*C[1]+t*t*B[1]]); }
+    // the outer edge: from the far end to A, then the curve to B
+    const keep=[]; let acc=0; for(let i=0;i<E.length;i++){ if(i){ acc+=Math.hypot(E[i][0]-E[i-1][0],E[i][1]-E[i-1][1]); } if(acc>EL-tA) break; keep.push(E[i]); } keep.push(A); const newE=keep.concat(bez);
+    // the gore: where the ramp's INNER edge reaches the deck's edge, the ramp lane runs on beside the deck's outer lane to B —
+    // the deck's old edge line becomes the lane line between them (dashed), ending where the taper closes
+    const I=outerL?Rk:Lk; const Irev=I.slice().reverse(); let nose=null; for(let t=0;t<plen(I);t+=2){ const q=pointAlong(Irev,t); if(nearOnPoly(q,o.g)[0]>dh){ nose=pointAlong(ED, alongOnPoly(ED,q)[1]); break; } }
+    if(nose){ const a0=alongOnPoly(ED,nose)[1], a1=clamp(aB+dirB*60,0,plen(ED)); const lo=Math.min(a0,a1), hi=Math.max(a0,a1); if(hi-lo>4){ const line=[]; for(let t=lo;t<=hi;t+=3) line.push(pointAlong(ED,t)); line.push(pointAlong(ED,hi)); merges.push({line, deck:o}); } }
+    if(outerL) Lk=newE; else Rk=newE; L=k?Lk:Lk.slice().reverse(); R=k?Rk:Rk.slice().reverse(); taper=true; });
+  return {L,R,taper,merges}; }
 function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CTX_CACHE.v; const F=localFrame(s); const cx=(s.g[0][0]+s.g[s.g.length-1][0])/2, cy=(s.g[0][1]+s.g[s.g.length-1][1])/2;
   const near=p=>Math.hypot(p[0]-cx,p[1]-cy)<R+200;
   // surrounding streets carry their full record (s) so the renderers can draw existing lanes, direction, parking, signals
@@ -681,8 +762,13 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
   // v2: centrelines are smoothed (curves read as curves); a bridge / viaduct whose right-of-way value is implausibly narrow for
   // its OSM lanes (the Cambie Bridge is recorded at 10.1 m) is widened to its lanes × 3.3 m plus a 1.5 m edge each side
   const streets=SEGS.filter(o=>o.i!==s.i && o.g.some(near)).map(o=>{ const trimLR=[0,1].map(k=>endSides(o,k,sameLevelCross(o,k))); const trim=trimLR.map(t=>Math.max(t.L,t.R));   // a street passing under a deck keeps its curbs
-    const up=isUpSeg(o), ln=(o.osm&&o.osm.ln)||0; const rec=(up&&ln&&o.ctc<ln*3.0) ? {...o, ctc:Math.round(ln*3.3*10)/10, row:Math.round((ln*3.3+3)*10)/10} : o;
+    const up=isUpSeg(o); const sc=structCtc(o); const rec=(up&&sc!==o.ctc) ? {...o, ctc:sc, row:Math.max(o.row, Math.round((sc+3)*10)/10)} : o;   // v3: structure widths from lanes (structCtc)
     return {row:rec.row,u:o.u,s:o,m:laneModel(rec),g:smoothLine(o.g.map(p=>F.toLocal(p[0],p[1])),2),trim,trimLR,bar:trimLR.map(t=>t.bar),cross:trim.map(t=>t>0),up,lvl:up?((o.osm&&o.osm.ly)||1):0}; });
+  // v3: the City's file carries some structure centrelines twice (1300 Howe St, the Granville St approach north of Pacific):
+  // two slabs on one line read as a stacked deck, so a duplicate (same ends, same length) is dropped — the one with a lane count stays
+  for(let i=streets.length-1;i>=0;i--){ const st=streets[i]; const a=st.g[0], b=st.g[st.g.length-1], L=plen(st.g);
+    const j=streets.findIndex((o,jj)=>jj<i && (o.up||st.up||o.s.n===st.s.n) && Math.hypot(o.g[0][0]-a[0],o.g[0][1]-a[1])<2.5 && Math.hypot(o.g[o.g.length-1][0]-b[0],o.g[o.g.length-1][1]-b[1])<2.5 && Math.abs(plen(o.g)-L)<3);
+    if(j<0) continue; const o=streets[j]; const ln=x=>(x.s.osm&&x.s.osm.ln)||0; if(ln(st)&&!ln(o)) streets.splice(j,1); else streets.splice(i,1); }
   // bridge decks: height at each end (6 m per OSM layer; 0 where the end lands on a street at grade) and mid-block, for 3D
   // v2: the height at each node comes from the street's level there, so two pieces meeting at a node agree; a piece whose ends
   // differ (a ramp) runs as one straight grade between them — no step where a ramp meets its deck
@@ -692,16 +778,79 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
   // a street at grade that carries on from a deck node (the Granville Bridge lands on Hemlock St) is the deck's approach: it runs
   // down from that node's height to grade as one ramp, drawn and shaded as part of the structure
   streets.forEach(st=>{ if(st.up) return; const h0=nodeH(st.s,0), h1=nodeH(st.s,1); if(h0<0.5&&h1<0.5) return; st.deck=[h0,(h0+h1)/2,h1]; st.L=plen(st.g); st.up=true; st.lvl=Math.max(st.lvl||0,1); });
+  // v3: one surface per structure. (1) a piece whose centreline runs inside a wider deck at its level for most of its length
+  // (the Granville connector pieces on the bridge deck) is HOSTED: it gets no slab, band, edges or piers of its own — only its
+  // markings on the deck. Decided first, from the City's lines, before any ramp is moved
+  // (a piece of the same width lying on a longer one — the 1400 Granville St address line on the bridge deck — is hosted by it)
+  streets.forEach(st=>{ if(!st.deck) return; const smp=alongLine(st.g,5,2.5); if(!smp.length) return; const Ls=plen(st.g);
+    const inside=smp.filter(q=>streets.some(o=>o!==st&&o.deck&&(o.m.ctc>st.m.ctc+0.5||(Math.abs(o.m.ctc-st.m.ctc)<=0.5&&plen(o.g)>Ls+5))&&nearOnPoly([q[0],q[1]],o.g)[0]<o.m.ctc/2&&Math.abs(deckAtSt(o,q[0],q[1])-deckAtSt(st,q[0],q[1]))<1.5)).length;
+    if(inside/smp.length>=0.6) st.host2=true; });
   // a ramp stays at deck level for as long as it runs inside the deck it leaves (the gore), and only then falls away on one
   // grade — so it never drops through the deck's side; the same for a ramp climbing into a deck
   const blockUp=lvlOf(s)>0||nodeH(s,0)>0.5||nodeH(s,1)>0.5, bH=[nodeH(s,0),nodeH(s,1)];
   const inDeckAt=(st,p,h)=>streets.some(o=>o!==st&&o.deck&&o.m.ctc>st.m.ctc&&nearOnPoly(p,o.g)[0]<o.m.ctc/2&&Math.abs(deckAtSt(o,p[0],p[1])-h)<1.5) || (blockUp&&Math.abs(p[0])<s.ctc/2&&p[1]>0&&p[1]<s.len&&Math.abs(bH[0]+(bH[1]-bH[0])*p[1]/s.len-h)<1.5);
-  streets.forEach(st=>{ if(!st.deck) return; const [h0,,h1]=st.deck; if(Math.abs(h0-h1)<0.5) return; const L=st.L; const smp=alongLine(st.g,4,2); let a0=0, a1=L;
+  // v3: the streets a piece passes over (their centreline crosses its centreline with no node there — the City splits a street at
+  // every at-grade junction, so a plan crossing without a node is grade-separated): the fall starts only past the last of them
+  const segX=(a,b,c,d)=>{ const r=[b[0]-a[0],b[1]-a[1]], q=[d[0]-c[0],d[1]-c[1]]; const den=r[0]*q[1]-r[1]*q[0]; if(Math.abs(den)<1e-9) return null; const w=[c[0]-a[0],c[1]-a[1]]; const t=(w[0]*q[1]-w[1]*q[0])/den, u=(w[0]*r[1]-w[1]*r[0])/den; return (t>0&&t<1&&u>0&&u<1)?t:null; };
+  const underAt=st=>{ const out=[]; const g=st.g; const L=st.L||plen(g); streets.forEach(o=>{ if(o===st||o.deck||o.host2) return; let acc=0; for(let i=1;i<g.length;i++){ const sl=Math.hypot(g[i][0]-g[i-1][0],g[i][1]-g[i-1][1]); for(let j=1;j<o.g.length;j++){ const t=segX(g[i-1],g[i],o.g[j-1],o.g[j]); if(t!=null){ const a=acc+t*sl; if(a>15&&a<L-15) out.push(a); } } acc+=sl; } }); return out; };
+  streets.forEach(st=>{ if(!st.deck||st.host2) return; const [h0,hm,h1]=st.deck; const L=st.L;
+    // v3: a deck that lands at both ends (the Burrard Bridge: Pacific St and Cornwall Ave at grade) climbs, runs level, and falls —
+    // 8 % at the most, each landing kept clear of the streets the deck crosses over, steepening to 12 % where it must
+    if(Math.abs(h0-h1)<0.5 && hm>Math.max(h0,h1)+0.5){ const xs=underAt(st); const up=hm-h0, dn=hm-h1; let a0=Math.min(L/2, up/0.08), a1=Math.max(L/2, L-dn/0.08); if(xs.length){ a0=Math.min(a0, Math.min(...xs)-4); a1=Math.max(a1, Math.max(...xs)+4); } a0=Math.max(a0, Math.min(L/2, up/0.12)); a1=Math.min(a1, Math.max(L/2, L-dn/0.12)); if(a1<=a0+1) return;
+      st.prof={h0,a0,h1,a1,k:[[0,h0],[a0,hm],[a1,hm],[L,h1]]}; return; }
+    if(Math.abs(h0-h1)<0.5) return; const smp=alongLine(st.g,4,2); let a0=0, a1=L;
     if(h0>h1){ for(const q of smp){ if(inDeckAt(st,[q[0],q[1]],h0)) a0=alongOnPoly(st.g,[q[0],q[1]])[1]+2; else break; } }
     else { for(let i=smp.length-1;i>=0;i--){ const q=smp[i]; if(inDeckAt(st,[q[0],q[1]],h1)) a1=alongOnPoly(st.g,[q[0],q[1]])[1]-2; else break; } }
-    // the fall (or climb) needs room: at most 8 % grade, so 75 m for 6 m; a ramp inside its deck to the very end falls over its last 75 m
-    const need=Math.abs(h0-h1)/0.08; if(h0>h1) a0=Math.min(a0, Math.max(0,L-need)); else a1=Math.max(a1, Math.min(L,need));
+    // the fall (or climb) needs room: at most 8 % (75 m for 6 m) — a ramp inside its deck to the very end falls over its last 75 m;
+    // it starts only past the last street the piece crosses over (that street keeps its clearance), steepening to 12 % at most
+    const dh=Math.abs(h0-h1); const need=dh/0.08, least=dh/0.12; const xs=underAt(st);
+    if(h0>h1){ a0=Math.min(a0, Math.max(0,L-need)); if(xs.length) a0=Math.max(a0, Math.max(...xs)+4); a0=Math.min(a0, Math.max(0,L-least)); }
+    else { a1=Math.max(a1, Math.min(L,need)); if(xs.length) a1=Math.min(a1, Math.min(...xs)-4); a1=Math.max(a1, Math.min(L,least)); }
     if(a1<=a0+1) return; st.prof={h0,a0,h1,a1}; });
+  // v3: a ramp running beside a deck at another level sits outside the deck's edge band (a sidewalk is never above a ramp): where the
+  // two bands would overlap and the heights differ by more than a metre, the ramp's line moves outward by the overlap, easing back
+  // to the City's line as it reaches the deck's level (there the gore taper joins the two surfaces)
+  streets.forEach(st=>{ if(!st.deck||!st.prof||st.host2) return; const decks=streets.filter(o=>o!==st&&o.deck&&!o.host2&&o.m.ctc>st.m.ctc+0.5); if(!decks.length) return;
+    const bwS=structBandW(st)/2; const L=st.L; const g=resampleLine(st.g, Math.max(3, Math.ceil(L/5)+1)); let moved=false;
+    const out=g.map(p=>{ const h=deckAtSt(st,p[0],p[1]); let s=0, dir=null; decks.forEach(o=>{ const [d,q]=nearOnPoly(p,o.g); const need=structBandW(o)/2+bwS+0.2; const dh=Math.abs(deckAtSt(o,p[0],p[1])-h); if(d<need&&d>0.5&&dh>1.0){ const k=Math.min(1,(dh-1)/2); const sh=(need-d)*k; if(sh>s){ s=sh; dir=[p[0]-q[0],p[1]-q[1]]; } } }); if(!dir||s<0.05) return p; moved=true; const n=Math.hypot(dir[0],dir[1])||1; return [p[0]+dir[0]/n*s, p[1]+dir[1]/n*s]; });
+    if(moved){ st.g=smoothLine(out,2); st.L=plen(st.g); } });
+  // (2) a piece whose end lies in a wider deck MERGES there: its centreline is run on to the deck (far enough for its inner edge to
+  // cross the deck's through edge, so the gore between them is paved) and its outer edge tapers into the deck edge (structEdges),
+  // so ramp and deck read as one continuous surface. Merges are found for every piece first: a deck keeps its full width up to a node
+  // where a ramp leaves or joins on that side (the lane the ramp takes is the lane drop) and tapers only where nothing joins
+  streets.forEach(st=>{ if(!st.deck||st.host2) return; st.merge=[0,1].map(k=>mergeDeckAt(streets,st,k)); st.rampSide=[{},{}]; });
+  streets.forEach(st=>{ if(!st.merge) return; [0,1].forEach(k=>{ const o=st.merge[k]; if(!o) return; const g=st.g; const p=k?g[g.length-1]:g[0]; const body=pointAlong(k?g.slice().reverse():g, Math.min(20, plen(g)/2));
+    const og=o.g, oL=plen(og); const a=alongOnPoly(og,p)[1]; const ko=a<8?0:a>oL-8?1:null; if(ko==null) return;   // a merge at the deck's own node
+    const q1=pointAlong(og,Math.max(0,a-4)), q2=pointAlong(og,Math.min(oL,a+4)); const u=[q2[0]-q1[0],q2[1]-q1[1]]; const v=[body[0]-p[0],body[1]-p[1]]; const side=(u[0]*v[1]-u[1]*v[0])>0?'L':'R'; o.rampSide[ko][side]=true; }); });
+  streets.forEach(st=>{ if(!st.merge) return;
+    let gx=st.g.slice(); st.ext0=0; [0,1].forEach(k=>{ const o=st.merge[k]; if(!o) return; const p=k?gx[gx.length-1]:gx[0], q=k?gx[gx.length-2]:gx[1]; const d=nearOnPoly(p,o.g)[0];
+      const aP=alongOnPoly(o.g,p)[1], oL=plen(o.g); const q1=pointAlong(o.g,Math.max(0,aP-4)), q2=pointAlong(o.g,Math.min(oL,aP+4)); const u=[q2[0]-q1[0],q2[1]-q1[1]], uL=Math.hypot(u[0],u[1])||1; const r=[p[0]-q[0],p[1]-q[1]], rL=Math.hypot(r[0],r[1])||1; const sinT=Math.abs(u[0]*r[1]-u[1]*r[0])/(uL*rL);
+      const ext=Math.max(d+1, Math.min(36, (st.m.ctc/2)/Math.max(sinT,0.1)+2)); if(ext<0.5) return; const e=[p[0]+(p[0]-q[0])/rL*ext, p[1]+(p[1]-q[1])/rL*ext]; if(k) gx.push(e); else { gx.unshift(e); st.ext0=ext; } });
+    st.gx=gx;
+    // width targets at each end and side: the piece this one continues into (same street or collinear), if narrower — its curb-to-curb
+    // and its band (a street at grade beyond a ramp's landing has the full boulevard, so the band opens out to it); no taper on a
+    // side where a ramp leaves or joins at that node
+    const tg=[0,1].map(k=>{ if(st.merge[k]) return [null,null]; const nb=endNeighbours(st.s,k).cont.map(o=>streets.find(x=>x.s===o)).filter(Boolean); if(!nb.length) return [null,null];
+      return [Math.min(...nb.map(x=>x.m.ctc/2)), Math.min(...nb.map(x=>(x.deck?structBandW(x):x.row)/2))]; });
+    const tgSide=(sd,i)=>tg.map((t,k)=>st.rampSide[k][sd]?null:t[i]);
+    const fnP={L:widthFn(st, st.m.ctc/2, tgSide('L',0)), R:widthFn(st, st.m.ctc/2, tgSide('R',0))}, fnB={L:widthFn(st, structBandW(st)/2, tgSide('L',1)), R:widthFn(st, structBandW(st)/2, tgSide('R',1))};
+    st.E={pav:structEdges(st, st.m.ctc/2, o=>o.m.ctc/2, fnP), band:structEdges(st, structBandW(st)/2, o=>structBandW(o)/2, fnB)};
+    st.E.ring=[...st.E.pav.L,...st.E.pav.R.slice().reverse()]; });
+  // v3: a ramp keeps its deck's level until its whole width has cleared the deck's carriageway (the nose of the gore) and only then
+  // falls — so no edge of it is ever inside the deck at another height (that read as a twist)
+  streets.forEach(st=>{ if(!st.prof||st.host2) return; const {h0,h1}=st.prof; const L=st.L; const hw=st.m.ctc/2-0.4; const hTop=Math.max(h0,h1);
+    const decks=streets.filter(o=>o!==st&&o.deck&&!o.host2&&o.m.ctc>st.m.ctc+0.5); if(!decks.length) return;
+    const anyIn=a=>{ const p=pointAlong(st.g,a), q=pointAlong(st.g,Math.min(L,a+1)); let dx=q[0]-p[0], dz=q[1]-p[1]; const n=Math.hypot(dx,dz)||1; dx/=n; dz/=n; return [-hw,hw].some(off=>{ const e=[p[0]+dz*off,p[1]-dx*off]; return decks.some(o=>nearOnPoly(e,o.g)[0]<o.m.ctc/2-0.3&&Math.abs(deckAtSt(o,e[0],e[1])-hTop)<1.5); }); };
+    if(h0>h1){ let a=st.prof.a0; for(let t=a;t<Math.min(L-4,a+120);t+=3){ if(anyIn(t)) a=t+3; else break; } if(a>st.prof.a0){ st.prof.a0=a; st.prof.a1=Math.max(st.prof.a1, Math.min(L, a+Math.abs(h0-h1)/0.12)); } }
+    else { let a=st.prof.a1; for(let t=a;t>Math.max(4,a-120);t-=3){ if(anyIn(t)) a=t-3; else break; } if(a<st.prof.a1){ st.prof.a1=a; st.prof.a0=Math.min(st.prof.a0, Math.max(0, a-Math.abs(h0-h1)/0.12)); } } });
+  // v3: a divided deck — two one-way pieces of one bridge running side by side (the Cambie Bridge's northbound and southbound
+  // carriageways, mapped as two centrelines) — is one structure: each piece's band reaches the midline between the two, so
+  // the two bands meet and the deck reads as one slab with a median, not two ribbons with a gap
+  streets.forEach(st=>{ if(!st.deck||st.host2||!st.E||!st.m.ow) return; const L=plen(st.g); const mid=pointAlong(st.g,L/2);
+    const tw=streets.find(o=>o!==st&&o.deck&&!o.host2&&o.m.ow&&o.s.s===st.s.s&&(o.m.owd||0)*(st.m.owd||0)<0&&nearOnPoly(mid,o.g)[0]<22&&Math.abs(deckAtSt(o,mid[0],mid[1])-deckAtSt(st,mid[0],mid[1]))<1.5); if(!tw) return; st.twin=tw;
+    const a=st.g[0], b=st.g[st.g.length-1]; const ux=b[0]-a[0], uz=b[1]-a[1]; const q=nearOnPoly(mid,tw.g)[1]; const innerR=(ux*(q[1]-mid[1])-uz*(q[0]-mid[0]))<0;   // the twin lies to the right of travel
+    const g=st.gx||st.g; const hwP=st.m.ctc/2; const inner=a2=>{ const p=pointAlong(g,a2); const d=nearOnPoly(p,tw.g)[0]; return Math.max(hwP+0.3, Math.min(d/2, 12)); };
+    st.E.band[innerR?'R':'L']=offsetLineVar(g, a2=>(innerR?1:-1)*inner(a2)); });
   const distTo=(st,p)=>{ let d=Infinity; for(let k=1;k<st.g.length;k++){ const a=st.g[k-1], b=st.g[k]; const dx=b[0]-a[0], dz=b[1]-a[1]; const t=clamp(((p[0]-a[0])*dx+(p[1]-a[1])*dz)/(dx*dx+dz*dz||1),0,1); d=Math.min(d, Math.hypot(p[0]-(a[0]+t*dx), p[1]-(a[1]+t*dz))); } return d; };
   // existing bikeways: oriented S→N / W→E, with the street they run on (for curb-to-curb and which direction has the lane)
   const bike=BW.filter(b=>b.g.some(near)).map(b=>{ const g=smoothLine(fwdOrient(b.g).map(p=>F.toLocal(p[0],p[1])),2); const mid=g[Math.floor(g.length/2)];
@@ -759,10 +908,21 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
     if(x1<cx-ext||x0>cx+ext||y1<cy-ext||y0>cy+ext) return; water.push(ring.map(p=>F.toLocal(p[0],p[1]))); });
   // hosted facilities: the host's own record and OSM side win where the host has them; the lanes cover the hosted along-range
   // (widened to the whole block when the piece covers most of it), inside the host's junction trims
-  const bikeHosted=[...hosted.values()].map(h=>{ const st=h.st, L=plen(st.g), rec=st.s.bw||{}; let a0=h.a0, a1=h.a1; if(a0<12) a0=0; if(a1>L-12) a1=L;
-    const g=trimLine(st.g, Math.max(a0, st.trim[0]+1), Math.max(L-a1, st.trim[1]+1)); const fs=facilitySide(st.s);
-    return {st, g, b:{t:rec.t||h.t, d:rec.dir||h.d, wn:rec.wn!==undefined?rec.wn:h.wn, es:rec.es!==undefined?rec.es:h.es, side:(fs==='L'||fs==='R')?fs:h.side}, ctc:st.m.ctc}; }).filter(h=>h.g.length>1);
-  const v={streets,bike,bikeHosted,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.v=v; return v; }
+  // v3: the deck that carries the block itself (the rule of sceneCtx.host): its existing lanes stop at the block's ends — the
+  // design replaces them there — and the renderers taper the block's lanes into them, so the lane is one lane along the deck
+  const blockLvl=lvlOf(s); let blockHost=null; if(blockLvl>0){ const zs=[]; for(let z=2;z<s.len-2;z+=8) zs.push(z); streets.forEach(st=>{ if(st.lvl!==blockLvl||st.m.ctc<=s.ctc+1) return; const n=zs.filter(z=>nearOnPoly([0,z],st.g)[0]<s.ctc/2).length; if(zs.length&&n/zs.length>=0.6&&(!blockHost||st.m.ctc>blockHost.m.ctc)) blockHost=st; }); }
+  const bikeHosted=[]; [...hosted.values()].forEach(h=>{ const st=h.st, L=plen(st.g), rec=st.s.bw||{}; let a0=h.a0, a1=h.a1; if(a0<12) a0=0; if(a1>L-12) a1=L; const fs=facilitySide(st.s);
+    const b={t:rec.t||h.t, d:rec.dir||h.d, wn:rec.wn!==undefined?rec.wn:h.wn, es:rec.es!==undefined?rec.es:h.es, side:(fs==='L'||fs==='R')?fs:h.side};
+    // the deck's existing lane beyond the block takes the block's own side (the design keeps an existing two-way lane on its
+    // recorded side), so the lane does not jump across the deck where the block begins
+    if(st===blockHost){ const bs=facilitySide(s); if(bs==='L'||bs==='R') b.side=bs; }
+    const ranges=[[a0,a1]];
+    if(st===blockHost){ const aS=alongOf(st.g,[0,0])[1], aE=alongOf(st.g,[0,s.len])[1]; const lo=Math.min(aS,aE), hi=Math.max(aS,aE); ranges.length=0; if(lo-a0>4) ranges.push([a0,lo]); if(a1-hi>4) ranges.push([hi,a1]); }
+    ranges.forEach(([r0,r1])=>{ const g=trimLine(st.g, Math.max(r0, st.trim[0]+1), Math.max(L-r1, st.trim[1]+1)); if(g.length>1) bikeHosted.push({st, g, b, ctc:st.m.ctc, blockHost:st===blockHost}); }); });
+  // v3: the other blocks of the proposal this block belongs to, with their proposed lanes and buffers (drawn as context so the
+  // whole proposal is seen, not one block)
+  const propLanes=(typeof proposalContextLanes==='function')?proposalContextLanes(s,F,near):[];
+  const v={streets,bike,bikeHosted,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.v=v; return v; }
 function pointInRing(x,z,r){ let inside=false; for(let i=0,j=r.length-1;i<r.length;j=i++){ const [xi,zi]=r[i], [xj,zj]=r[j]; if(((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/((zj-zi)||1e-9)+xi)) inside=!inside; } return inside; }
 
 // ── v2: review export — every block end the tool reads as something special, for checking against Google Maps ──────────

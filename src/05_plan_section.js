@@ -189,31 +189,42 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
       // deck when the block is elevated, gets no line and no marking from this street — a ramp's edges start where it leaves the deck
       // edges: inside ANY other structure at this level → no line, so what remains is the outline of the union — a ramp's edge
       // and the deck's edge meet at the point of divergence and the join tapers; markings: only a wider structure silences them
-      const inBlock=p=>S_.lvl>0 && Math.abs(p[0])<S_.c.ctc/2-0.25 && p[1]>0 && p[1]<LEN;
-      const inOther=(st,p)=>list.some(o=>o!==st && o.m.ctc>=st.m.ctc-0.01 && nearOnPoly(p,o._pav)[0]<o.m.ctc/2-0.25) || inBlock(p);
-      const inOtherEdge=(st,p)=>list.some(o=>o!==st && nearOnPoly(p,o._pav)[0]<o.m.ctc/2-0.25) || inBlock(p);
+      // v3: over a host deck the block adds only its bike lanes and buffers — the deck's own lanes and markings run straight
+      // through the block, silenced only where those zones are; a block on its own deck silences everything in its carriageway
+      const zones=els.filter(e=>e.k==='bike'||e.k==='buf').map(e=>[e.x-0.1,e.x+e.w+0.1]);
+      const inBlock=p=>S_.lvl>0 && p[1]>0 && p[1]<LEN && (S_.host ? zones.some(([a,b])=>p[0]>a&&p[0]<b) : Math.abs(p[0])<S_.c.ctc/2-0.25);
+      // v3: a structure's footprint is its edge polygon (tapers and merges included); a hosted piece has no slab, so it silences nothing
+      const inPav=(o,p)=>o.E&&o.E.ring ? (pointInRing(p[0],p[1],o.E.ring) && nearOnPoly(p,o._pav)[0]>0.01) : nearOnPoly(p,o._pav)[0]<o.m.ctc/2-0.25;
+      const inOther=(st,p)=>list.some(o=>o!==st && !o.host2 && o.m.ctc>=st.m.ctc-0.01 && inPav(o,p)) || inBlock(p);
+      const inOtherEdge=(st,p)=>list.some(o=>o!==st && !o.host2 && inPav(o,p)) || inBlock(p);
       // a deck's band: bridges carry a sidewalk (up to 2.25 m a side), a one-way ramp only its parapet — not the 3.6 m boulevard the right-of-way implies
-      const bandW=st=>up ? (st.m.ow ? st.m.ctc+1.2 : Math.min(st.row, st.m.ctc+4.5)) : st.row;
+      const bandW=st=>up ? structBandW(st) : st.row;
+      // v3: a hosted piece (inside a wider deck) is not drawn as a slab of its own; a merging ramp is drawn from its tapered edges
+      const hosted=st=>up&&st.host2; const tapered=st=>up&&!!st.E;   // every structure piece is drawn from its edges (width tapers, merge tapers)
+      const fillEdges=(E,col)=>{ const ring=[...E.L,...E.R.slice().reverse()]; if(ring.length<3) return; ctx.fillStyle=col; ctx.beginPath(); ring.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.closePath(); ctx.fill(); };
       if(up){ // one shadow for everything at this level (decks, ramps, deck paths, the block's own deck): drawn once through an
         // offscreen mask so overlaps do not darken twice, and the deck outlines read as one structure
         const sc=document.createElement('canvas'); sc.width=W; sc.height=H; const c2=sc.getContext('2d'); c2.setTransform(v.z,0,0,v.z,v.x,v.y); c2.lineCap='round'; c2.lineJoin='round'; c2.strokeStyle='#000'; c2.fillStyle='#000';
         const sp=(g,w)=>{ if(g.length<2) return; c2.lineWidth=w; c2.beginPath(); g.forEach(([x,z],i)=>{ i?c2.lineTo(X(x),Y(z)):c2.moveTo(X(x),Y(z)); }); c2.stroke(); };
-        list.forEach(st=>sp(shift(st._pav,sh(st.lvl||1)),(bandW(st)+1)*S)); C.osmPaths.filter(p=>p.up).forEach(p=>sp(shift(p.g,sh(p.lvl||1)),((p.ow?2:3)+1)*S));
+        list.forEach(st=>{ if(hosted(st)) return; if(tapered(st)){ const d=sh(st.lvl||1); const ring=[...st.E.band.L,...st.E.band.R.slice().reverse()].map(([x,z])=>[x+d[0],z+d[1]]); c2.beginPath(); ring.forEach(([x,z],i)=>{ i?c2.lineTo(X(x),Y(z)):c2.moveTo(X(x),Y(z)); }); c2.closePath(); c2.fill(); c2.lineWidth=1*S; c2.stroke(); } else sp(shift(st._pav,sh(st.lvl||1)),(bandW(st)+1)*S); }); C.osmPaths.filter(p=>p.up).forEach(p=>sp(shift(p.g,sh(p.lvl||1)),((p.ow?2:3)+1)*S));
         if(S_.lvl>0){ const d=sh(S_.lvl); c2.fillRect(X(xL+d[0]),Y(LEN+d[1]),(xR-xL)*S,LEN*S); }
         ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.globalAlpha=0.17; ctx.drawImage(sc,0,0); ctx.restore(); }
       // the sidewalk band runs to the node (the crossing street's pavement, painted next, covers the part inside it), so at a
       // T-junction the sidewalk on the side with no crossing street is continuous; decks: every band first, then every pavement,
       // so where a ramp leaves the deck the surfaces merge
-      list.forEach(st=>stroke(up?st._pav:st.g, bandW(st)*S, up?'#DBD8D0':'#E3E0D8'));
-      list.forEach(st=>stroke(st._pav, Math.max(1,st.m.ctc*S), up?'#9EA09F':'#A9ABA9'));
+      list.forEach(st=>{ if(hosted(st)) return; if(tapered(st)) fillEdges(st.E.band,'#DBD8D0'); else stroke(up?st._pav:st.g, bandW(st)*S, up?'#DBD8D0':'#E3E0D8'); });
+      list.forEach(st=>{ if(hosted(st)) return; if(tapered(st)) fillEdges(st.E.pav,'#9EA09F'); else stroke(st._pav, Math.max(1,st.m.ctc*S), up?'#9EA09F':'#A9ABA9'); });
       // existing lane markings from each street's traffic model: yellow centreline on two-way streets,
       // dashed lane lines where the width gives more than one lane per direction, faint parking-lane edges
-      ctx.lineCap='butt'; list.forEach(st=>{ streetMarkings(st).forEach(mk=>{ const col=mk.kind==='centre'?'rgba(255,214,0,.85)':mk.kind==='park'?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)'; (up?dropInside(mk.g,p=>inOther(st,p)):[mk.g]).forEach(r=>poly(r, mk.w, col, mk.dash)); }); });
+      ctx.lineCap='butt'; list.forEach(st=>{ streetMarkings(st).forEach(mk=>{ const col=mk.kind==='centre'?'rgba(255,214,0,.85)':mk.kind==='park'?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)'; (up?dropInside(mk.g,p=>inOther(st,p)):[mk.g]).forEach(r=>poly(r, mk.w, col, mk.dash)); });
+        // v3: the gore lane line — the deck's old edge, dashed, between the ramp lane and the deck's outer lane until the taper closes
+        if(up&&st.E) [...st.E.pav.merges].forEach(m=>poly(m.line,0.12,'rgba(255,255,255,.85)',[2,3.5])); });
       // curb and property lines (a structure's edges read darker; a deck's outer line is its parapet), stopping at a crossing
       // street only on the side it leaves from (per-side trims); on decks, only outside every other structure
-      list.forEach(st=>{ const bw=bandW(st); [st.m.ctc/2, -st.m.ctc/2, bw/2, -bw/2].forEach((off,k)=>{ const sd=off>0?'R':'L'; const g=up?st._pav:trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(g.length<2) return;
+      list.forEach(st=>{ if(hosted(st)) return; const bw=bandW(st); [st.m.ctc/2, -st.m.ctc/2, bw/2, -bw/2].forEach((off,k)=>{ const sd=off>0?'R':'L'; const g=up?st._pav:trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(g.length<2) return;
         ctx.strokeStyle = k<2 ? 'rgba(40,40,40,.6)' : (up?'rgba(40,40,40,.8)':'rgba(40,40,40,.3)'); ctx.lineWidth = k<2 ? (up?LWT.med:LWT.light) : (up?LWT.med:LWT.hair);
-        const og=offsetLine(g,off); (up?dropInside(og,p=>inOtherEdge(st,p)):[og]).forEach(r=>{ ctx.beginPath(); r.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); }); }); }); };
+        const og=tapered(st) ? (k<2?st.E.pav:st.E.band)[sd] : offsetLine(g,off);   // v3: a merging ramp's edges are its tapered edges
+        (up?dropInside(og,p=>inOtherEdge(st,p)):[og]).forEach(r=>{ ctx.beginPath(); r.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); }); }); }); };
     // surface level: streets, turnaround loops (OSM, e.g. the loop at the end of 0 Smithe), surface paths, the lanes on surface
     // streets; then the bridge level (shadows, decks, deck paths, lanes on decks) over all of it
     drawStreets(C.streets.filter(st=>!elevated(st)),false);
@@ -221,6 +232,9 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     C.osmPaths.filter(p=>!p.up).forEach(p=>pathP(p.g,p.ow?2.0:3.0,p));
     C.bikePaths.forEach(p=>pathP(p.g,p.d==='OW'?2.0:3.0,{des:p.sub==='OSB'||p.t==='Protected Bike Lanes',ow:p.d==='OW'}));   // City pieces with no OSM path and no street: same path language
     hostedLanes(C.bikeHosted.filter(h=>!h.st.up));
+    // v3: the other blocks of the proposal, with their proposed lanes and buffers, so the plan shows the whole proposal (not in the before view)
+    if(!opts.before&&C.propLanes) C.propLanes.forEach(pl=>{ pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2); if(el.k==='bike') poly(cg, el.w, 'rgba(105,160,120,.9)'); else poly(cg, el.w, el.sep&&SEP[el.sep]&&(SEP[el.sep].bufKind==='paint'||SEP[el.sep].bufKind==='painted')?'rgba(190,190,186,.8)':'#CFCCC4'); });
+      pl.els.filter(el=>el.k==='bike').forEach(el=>{ [el.x, el.x+el.w].forEach(x=>poly(offsetLine(pl.g,x),0.08,'rgba(40,40,40,.55)')); }); });
     // v2: a structure that passes OVER the block (a ramp above a street being designed) is drawn after the proposal, with its
     // shadow falling on it, so the plan reads the right way up; decks at the block's own level (or elsewhere) are drawn now
     const bh=z=>S_.prof[0]+(S_.prof[1]-S_.prof[0])*z/LEN;
@@ -267,15 +281,15 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   if(S_.lvl>0 && !S_.host) rect(xL,0,xR-xL,LEN,'#DBD8D0');
   const swPaint=S_.host?((x0,z0,w,dz)=>{}):(S_.lvl>0?((x0,z0,w,dz)=>rect(x0,z0,w,dz,'#E3E0D8')):paving);   /* an existing deck sidewalk is context: plain, no scoring */
   // elements
-  els.forEach(e=>{ const sd=e.side==='C'?'R':e.side; if(e.k==='sw') withGaps(swPaint,e.x,e.w,sd); else if(e.k==='bike'){ asphalt(e.x,ZA,e.w,ZB-ZA); rect(e.x,ZA,e.w,ZB-ZA,'rgba(96,150,110,.45)'); } else if(e.k==='buf'){ withGaps((x0,z0,w,dz)=>{ rect(x0,z0,w,dz, SEP[e.sep].bufKind==='barrier'?'#B5B3AC':SEP[e.sep].bufKind==='raisedlane'?'#DAD7CF':'#CFCCC4'); if(SEP[e.sep].bufKind==='painted'||SEP[e.sep].bufKind==='paint') { rect(x0,z0,w,dz,'#A6A5A2'); ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=Math.max(1,S*.08); for(let z=z0;z<z0+dz;z+=1.2){ ctx.beginPath(); ctx.moveTo(X(x0),Y(z)); ctx.lineTo(X(x0+w),Y(z+.6)); ctx.stroke(); } } },e.x,e.w,sd); } else asphalt(e.x,ZA,e.w,ZB-ZA); });
+  els.forEach(e=>{ const sd=e.side==='C'?'R':e.side; if(e.k==='sw') withGaps(swPaint,e.x,e.w,sd); else if(e.k==='bike'){ asphalt(e.x,ZA,e.w,ZB-ZA); rect(e.x,ZA,e.w,ZB-ZA,'rgba(96,150,110,.45)'); } else if(e.k==='buf'){ withGaps((x0,z0,w,dz)=>{ rect(x0,z0,w,dz, SEP[e.sep].bufKind==='barrier'?'#B5B3AC':SEP[e.sep].bufKind==='raisedlane'?'#DAD7CF':'#CFCCC4'); if(SEP[e.sep].bufKind==='painted'||SEP[e.sep].bufKind==='paint') { rect(x0,z0,w,dz,'#A6A5A2'); ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=Math.max(1,S*.08); for(let z=z0;z<z0+dz;z+=1.2){ ctx.beginPath(); ctx.moveTo(X(x0),Y(z)); ctx.lineTo(X(x0+w),Y(z+.6)); ctx.stroke(); } } },e.x,e.w,sd); } else if(!S_.host) asphalt(e.x,ZA,e.w,ZB-ZA); });   // over a host deck the travel lanes ARE the deck's
   ctx.setLineDash([]);
   if(S_.lvl>0 && !S_.host){ ctx.strokeStyle='rgba(40,40,40,.85)'; ctx.lineWidth=LWT.med; [xL,xR].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),Y(0)); ctx.lineTo(X(x),Y(LEN)); ctx.stroke(); }); }   // parapet: the deck's edge
   else if(!S_.host){ ctx.strokeStyle='rgba(15,23,42,.7)'; ctx.lineWidth=LWT.light; ctx.setLineDash([6,3,1.5,3].map(d=>d*LWT.f)); [xL,xR].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),Y(-12)); ctx.lineTo(X(x),Y(LEN+12)); ctx.stroke(); }); ctx.setLineDash([]); }
   if(ANN&&!S_.host){ const tag=S_.lvl>0?'deck edge':'PL'; ctx.fillStyle='rgba(15,23,42,.7)'; ctx.font=`${Math.max(7,S*.38)}px JetBrains Mono`; ctx.textBaseline='bottom'; ctx.textAlign='right'; ctx.fillText(tag, X(xL)-2, Y(LEN*0.5)); ctx.textAlign='left'; ctx.fillText(tag, X(xR)+2, Y(LEN*0.5)); }
   // the block's curb lines beyond its section: only where the street carries straight on or dead-ends (at a cross street the curb return takes over)
-  const _sw=els.filter(e=>e.k==='sw'); ctx.strokeStyle='rgba(40,40,40,.85)'; ctx.lineWidth=LWT.heavy; [_sw[0].x+_sw[0].w, _sw[_sw.length-1].x].forEach(x=>{ ctx.beginPath(); if(EI[0].type!=='cross'){ ctx.moveTo(X(x),Y(0)); ctx.lineTo(X(x),Y(ZA)); } if(EI[1].type!=='cross'){ ctx.moveTo(X(x),Y(ZB)); ctx.lineTo(X(x),Y(LEN)); } ctx.stroke(); });
-  // the block's own curb lines (carriageway edge) are the heavy line of the drawing; the edges of the proposed elements are medium
-  [_sw[0].x+_sw[0].w, _sw[_sw.length-1].x].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),Y(ZA)); ctx.lineTo(X(x),Y(ZB)); ctx.stroke(); });
+  const _sw=els.filter(e=>e.k==='sw'); ctx.strokeStyle='rgba(40,40,40,.85)'; ctx.lineWidth=LWT.heavy; if(!S_.host) [_sw[0].x+_sw[0].w, _sw[_sw.length-1].x].forEach(x=>{ ctx.beginPath(); if(EI[0].type!=='cross'){ ctx.moveTo(X(x),Y(0)); ctx.lineTo(X(x),Y(ZA)); } if(EI[1].type!=='cross'){ ctx.moveTo(X(x),Y(ZB)); ctx.lineTo(X(x),Y(LEN)); } ctx.stroke(); });
+  // the block's own curb lines (carriageway edge) are the heavy line of the drawing; the edges of the proposed elements are medium (over a host deck there is no curb of its own)
+  if(!S_.host) [_sw[0].x+_sw[0].w, _sw[_sw.length-1].x].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),Y(ZA)); ctx.lineTo(X(x),Y(ZB)); ctx.stroke(); });
   ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.med;
   els.forEach(e=>{ if(e.k==='travel'||e.k==='park'||e.k==='sw') return; ctx.beginPath(); ctx.moveTo(X(e.x),Y(ZA)); ctx.lineTo(X(e.x),Y(ZB)); ctx.moveTo(X(e.x+e.w),Y(ZA)); ctx.lineTo(X(e.x+e.w),Y(ZB)); ctx.stroke(); });
   // markings
@@ -286,8 +300,16 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   const z0m = ZA + (EI[0].type==='cross'?EL[0].carStart:(isStop(EI[0])?5.0:0.5)), z1m = ZB - (EI[1].type==='cross'?EL[1].carStart:(isStop(EI[1])?5.0:0.5));
   const zb0 = ZA + (EI[0].type==='cross'?EL[0].bikeStart:(EI[0].type==='dead'?5.0:EI[0].type==='path'?1.0:0.5)), zb1 = ZB - (EI[1].type==='cross'?EL[1].bikeStart:(EI[1].type==='dead'?5.0:EI[1].type==='path'?1.0:0.5));   // at a path end the lane runs on to the hand-over
   const zp0 = EI[0].type==='cross'?ZA+IX.setback+0.5:z0m, zp1 = EI[1].type==='cross'?ZB-IX.setback-0.5:z1m;   // where posts / planters / barrier may stand
-  travel.forEach((tl,i)=>{ if(i===0) return; const centre=!tl.ow&&(tl.side==='C'||travel[i-1].side!==tl.side); ctx.strokeStyle=centre?'rgba(255,214,0,.95)':white; ctx.lineWidth=Math.max(1,S*.1); ctx.setLineDash(centre?[]:[S*2,S*1.5]); ctx.beginPath(); ctx.moveTo(X(tl.x),Y(z0m)); ctx.lineTo(X(tl.x),Y(z1m)); ctx.stroke(); ctx.setLineDash([]); });
-  park.forEach(pk=>{ ctx.strokeStyle=white; ctx.lineWidth=Math.max(1,S*.1); for(let z=z0m+1;z<z1m;z+=6){ ctx.beginPath(); ctx.moveTo(X(pk.x),Y(z)); ctx.lineTo(X(pk.x+pk.w),Y(z)); ctx.stroke(); } });
+  if(!S_.host) travel.forEach((tl,i)=>{ if(i===0) return; const centre=!tl.ow&&(tl.side==='C'||travel[i-1].side!==tl.side); ctx.strokeStyle=centre?'rgba(255,214,0,.95)':white; ctx.lineWidth=Math.max(1,S*.1); ctx.setLineDash(centre?[]:[S*2,S*1.5]); ctx.beginPath(); ctx.moveTo(X(tl.x),Y(z0m)); ctx.lineTo(X(tl.x),Y(z1m)); ctx.stroke(); ctx.setLineDash([]); });   // over a host deck the deck's own markings run through
+  if(!S_.host) park.forEach(pk=>{ ctx.strokeStyle=white; ctx.lineWidth=Math.max(1,S*.1); for(let z=z0m+1;z<z1m;z+=6){ ctx.beginPath(); ctx.moveTo(X(pk.x),Y(z)); ctx.lineTo(X(pk.x+pk.w),Y(z)); ctx.stroke(); } });
+  // v3: over a host deck the block's bike lanes taper into the deck's existing lanes at each end (10 m), so the lane reads as
+  // one lane along the deck that changes width / position smoothly where the design begins and ends
+  if(S_.host){ const hl=(S_.C.bikeHosted||[]).filter(h=>h.blockHost); const lanesH=hl.length?bikewayLanes(hl[0].b,hl[0].ctc,'L').filter(l=>l.kind!=='shared'):[];
+    const poly4=(a,b,c,d,fill)=>{ ctx.fillStyle=fill; ctx.beginPath(); ctx.moveTo(X(a[0]),Y(a[1])); ctx.lineTo(X(b[0]),Y(b[1])); ctx.lineTo(X(c[0]),Y(c[1])); ctx.lineTo(X(d[0]),Y(d[1])); ctx.closePath(); ctx.fill(); };
+    [0,1].forEach(k=>{ const zEnd=k?ZB:ZA, sgn=k?1:-1; const hp=nearOnPoly([0,zEnd],S_.host.g)[1]; const hx=hp?hp[0]:0;
+      bikes.forEach(b=>{ const bc=b.x+b.w/2; let best=null; lanesH.forEach(l=>{ const xe=hx+l.off; const d=Math.abs(xe-bc); if(d<6&&(!best||d<best.d)) best={xe,w:l.w,d}; }); if(!best) return; const T=10, z2=zEnd+sgn*T; const x0=best.xe-best.w/2, x1=best.xe+best.w/2;
+        poly4([b.x,zEnd],[b.x+b.w,zEnd],[x1,z2],[x0,z2],'#A9ABA9'); poly4([b.x,zEnd],[b.x+b.w,zEnd],[x1,z2],[x0,z2],'rgba(96,150,110,.45)');
+        ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.med; [[b.x,x0],[b.x+b.w,x1]].forEach(([xa,xb])=>{ ctx.beginPath(); ctx.moveTo(X(xa),Y(zEnd)); ctx.lineTo(X(xb),Y(z2)); ctx.stroke(); }); }); }); }
   const glyph=(cx,cz,dir)=>{ ctx.strokeStyle=white; ctx.fillStyle=white; ctx.lineWidth=Math.max(1,S*.08); const r=.22*S; [-.3,.3].forEach(dz=>{ctx.beginPath();ctx.arc(X(cx),Y(cz+dz*dir),r,0,Math.PI*2);ctx.stroke();}); ctx.beginPath();ctx.moveTo(X(cx),Y(cz-.3*dir));ctx.lineTo(X(cx+.2),Y(cz));ctx.lineTo(X(cx),Y(cz+.3*dir));ctx.stroke(); ctx.beginPath();ctx.ellipse(X(cx),Y(cz+.05*dir),.1*S,.18*S,0,0,Math.PI*2);ctx.fill(); };
   const arrow=(cx,cz,dir)=>{ ctx.fillStyle=white; const L=1,hw=.26; ctx.beginPath(); ctx.moveTo(X(cx-.07),Y(cz-L/2*dir));ctx.lineTo(X(cx+.07),Y(cz-L/2*dir));ctx.lineTo(X(cx+.07),Y(cz+L*.15*dir));ctx.lineTo(X(cx+hw),Y(cz+L*.15*dir));ctx.lineTo(X(cx),Y(cz+L/2*dir));ctx.lineTo(X(cx-hw),Y(cz+L*.15*dir));ctx.lineTo(X(cx-.07),Y(cz+L*.15*dir));ctx.closePath();ctx.fill(); };
   if(opts.shared){ travel.forEach(tl=>{ const dir=tl.side==='L'?-1:1; for(let z=z0m+6;z<z1m-4;z+=18){ glyph(tl.x+tl.w/2,z,dir); ctx.fillStyle=white; [0,0.5].forEach(o=>{ ctx.beginPath(); ctx.moveTo(X(tl.x+tl.w/2-0.4),Y(z+1.0*dir+o*dir)); ctx.lineTo(X(tl.x+tl.w/2),Y(z+1.4*dir+o*dir)); ctx.lineTo(X(tl.x+tl.w/2+0.4),Y(z+1.0*dir+o*dir)); ctx.lineTo(X(tl.x+tl.w/2),Y(z+1.2*dir+o*dir)); ctx.closePath(); ctx.fill(); }); } }); }
@@ -438,7 +460,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   const bollard=(cx,cz)=>{ ctx.fillStyle='#2A2A2A'; ctx.beginPath(); ctx.arc(X(cx),Y(cz),Math.max(1.5,.07*S),0,Math.PI*2); ctx.fill(); };
   sw.forEach(s=>{ const sd=s.side, t=S_.tr[sd]; if(!t||!t.n) return; const tx=sd==='L'?s.x+s.w*.75:s.x+s.w*.25; const sp=Math.max(6,t.sp); for(let z=(sd==='L'?3.1:7.4)%sp+ (ends[0]?5:0); z<LEN-3; z+=sp){ if(!inLaneAt(S_,sd,z)) tree(tx,z,t.h); } });
   // existing street trees on the surrounding streets (public-trees), flat and lighter so the context stays quiet
-  if (D.city) { S_.C.streets.forEach(st=>{ streetTrees(st).forEach(t=>{ const r=clamp(t.h*.19,.6,2.4); ctx.fillStyle='rgba(140,170,120,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),r*S,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(70,95,60,.35)'; ctx.lineWidth=LWT.hair; ctx.stroke(); ctx.fillStyle='rgba(60,50,40,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),.1*S,0,Math.PI*2); ctx.fill(); }); }); }
+  if (D.city) { S_.C.streets.forEach(st=>{ streetTrees(st, S_.C.streets).forEach(t=>{ const r=clamp(t.h*.19,.6,2.4); ctx.fillStyle='rgba(140,170,120,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),r*S,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(70,95,60,.35)'; ctx.lineWidth=LWT.hair; ctx.stroke(); ctx.fillStyle='rgba(60,50,40,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),.1*S,0,Math.PI*2); ctx.fill(); }); }); }
   els.filter(e=>e.k==='buf'&&!/^(barrier|paint|raisedlane)$/.test(SEP[e.sep].bufKind)).forEach(bf=>{ for(let z=zp0+1.5;z<zp1-.5;z+=3){ if(!inLaneAt(S_,bf.side,z)) bollard(bf.x+bf.w/2,z); } });
   park.forEach(pk=>{ const cx=pk.x+pk.w/2; for(let z=z0m+3.5;z<z1m-2;z+=6.4){ if(!inLaneAt(S_,pk.side,z-2.2)&&!inLaneAt(S_,pk.side,z+2.2)&&R()<.7) car(cx,z,['#EEF0F2','#DCE1E6','#E6E9EC'][Math.floor(R()*3)]); } });
   const mv=(z,v)=>{ const span=z1m-z0m-8; return z0m+4+(((z-z0m-4)+v*S_.t)%span+span)%span; };
@@ -523,7 +545,9 @@ function drawSectionTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||can
   const rr=(x,y,w,h,r)=>{ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();};
   const person=(cx,base,col)=>{ const u=S*.11,bx=X(cx),by=Yh(base); ctx.fillStyle=col; rr(bx-u*1.1,by-u*5.2,u*.9,u*5.2,u*.3); ctx.fill(); rr(bx+u*.2,by-u*5.2,u*.9,u*5.2,u*.3); ctx.fill(); rr(bx-u*1.7,by-u*11.4,u*3.4,u*6.4,u*1.1); ctx.fill(); ctx.fillStyle='#E8C9A8'; ctx.beginPath(); ctx.arc(bx,by-u*13.4,u*1.8,0,Math.PI*2); ctx.fill(); };
   const cyc=(cx,base,col)=>{ const u=S*.11,bx=X(cx),by=Yh(base); ctx.fillStyle='rgba(45,45,45,.85)'; ctx.fillRect(bx-u*.5,by-u*6.5,u,u*6.5); ctx.strokeStyle='rgba(45,45,45,.9)'; ctx.lineWidth=u*.6; ctx.beginPath(); ctx.moveTo(bx-u*3.2,by-u*8.4); ctx.lineTo(bx+u*3.2,by-u*8.4); ctx.stroke(); ctx.fillStyle=col; rr(bx-u*1.8,by-u*15.4,u*3.6,u*7,u*1.2); ctx.fill(); ctx.fillStyle='#E8C9A8'; ctx.beginPath(); ctx.arc(bx,by-u*17.4,u*1.8,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#F2F3F4'; ctx.beginPath(); ctx.arc(bx,by-u*17.9,u*1.9,Math.PI,Math.PI*2); ctx.fill(); };
-  els.filter(e=>e.k==='travel').forEach((tl,i)=>carEnd(tl.x+tl.w/2,i?'rgba(225,228,231,.9)':'rgba(205,210,214,.9)')); els.filter(e=>e.k==='park').forEach(pk=>carSide(pk.x+pk.w/2,'rgba(230,232,234,.9)'));
+  // every vehicle is seen end-on in a cross-section: a parallel-parked car stands along the street like the moving ones (the
+  // side view would mean angle / perpendicular parking, which the tool does not model — carSide is kept for that case)
+  els.filter(e=>e.k==='travel').forEach((tl,i)=>carEnd(tl.x+tl.w/2,i?'rgba(225,228,231,.9)':'rgba(205,210,214,.9)')); els.filter(e=>e.k==='park').forEach(pk=>(pk.angle?carSide:carEnd)(pk.x+pk.w/2,'rgba(230,232,234,.9)'));
   els.filter(e=>e.k==='bike').forEach((b,i)=>{ if(b.two){ cyc(b.x+b.w*.28,Math.max(b.h,.02),'#E8574B'); cyc(b.x+b.w*.72,Math.max(b.h,.02),'#3F6FB5'); } else cyc(b.x+b.w/2,Math.max(b.h,.02),['#E8574B','#3F6FB5'][i%2]); });
   sw.forEach((s,i)=>{ person(s.x+s.w*.38,.15,['#3F6FB5','#2FA6A0'][i%2]); person(s.x+s.w*.72,.15,['#E9B23A','#E8574B'][i%2]); });
   // v2: edit overlay on the proposed pane (handles sit on the surface line at each boundary)

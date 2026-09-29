@@ -1,27 +1,61 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // DESIGN SCREEN STATE
 // ═══════════════════════════════════════════════════════════════════════════
-const D = { ctx:null, options:[], cur:0, before:false, anim:false, city:true, view:'3d', beforeEls:[] };
+const D = { ctx:null, options:[], cur:0, before:true, anim:false, city:true, view:'3d', beforeEls:[] };   // v3: the before view is on by default, beside the street panel
 function showMap(){ $('screen-map').classList.add('active'); $('screen-design').classList.remove('active'); $('btn-back').style.display='none'; stop3D(); mapResize(); drawMap(); }
 function showDesign(){ $('screen-map').classList.remove('active'); $('screen-design').classList.add('active'); $('btn-back').style.display='inline-block'; }
-$('btn-back').onclick=showMap;
+$('btn-back').onclick=()=>{ if(typeof propNavKeep==='function') propNavKeep(); const p=D.prop&&PROJ.proposals.find(x=>x.id===D.prop.id); showMap(); if(p) showPropCard(p); };   // v3: a proposal block's design is kept on the way back
 $('btn-collapse').onclick=()=>{ const b=$('bottom'); b.classList.toggle('collapsed'); $('btn-collapse').textContent=b.classList.contains('collapsed')?'▴ Show panel':'▾ Hide panel'; setTimeout(redrawViews,220); };
-$('c-design').onclick=()=>{ if(map.sel && designable(map.sel).ok) openDesign(map.sel); else if(map.selBW){ const blk=blockOfBW(map.selBW); if(blk){ zoomTo(blk); selectSeg(blk); } } };
+// v3: the bottom panel shows either the design columns or the proposal's bike score
+function setBottomTab(t){ $('bcols').style.display=t==='score'?'none':''; $('bscore').style.display=t==='score'?'':'none'; $('bt-design').classList.toggle('active',t!=='score'); $('bt-score').classList.toggle('active',t==='score'); $('bottom').classList.remove('collapsed'); $('btn-collapse').textContent='▾ Hide panel'; if(t==='score'&&typeof renderScorePane==='function') renderScorePane(); }
+$('bt-design').onclick=()=>setBottomTab('design'); $('bt-score').onclick=()=>setBottomTab('score');
+function defaultDesignClick(){ if(map.sel && designable(map.sel).ok){ D.prop=null; openDesign(map.sel); } else if(map.selBW){ const blk=blockOfBW(map.selBW); if(blk){ zoomTo(blk); selectSeg(blk); } } }
+$('c-design').onclick=defaultDesignClick;
 
+// v3: the existing bike facility as the user says it is (the layer misses or mislabels some); null = as recorded
+const FAC_SPEC={none:null, shared:{t:'Shared Lanes',sub:''}, local:{t:'Local Street',sub:''}, NB:{t:'Painted Lanes',sub:'NB'}, PBT:{t:'Painted Lanes',sub:'PBT'}, PBP:{t:'Painted Lanes',sub:'PBP'}, PBPT:{t:'Painted Lanes',sub:'PBPT'}, SL:{t:'Protected Bike Lanes',sub:'SL'}, R:{t:'Protected Bike Lanes',sub:'R'}};
+function setUserFacility(s,fac){ if(!('bwOrig' in s)) s.bwOrig=s.bw||null; s.fac=fac||null; s.bwSide=fac&&fac.side&&fac.side!=='auto'?fac.side:null;
+  if(!fac||fac.k==='auto'){ s.bw=s.bwOrig; s.fac=null; } else { const sp=FAC_SPEC[fac.k]; s.bw=sp?{...sp, dir:fac.k==='local'||fac.k==='shared'?'2W':(fac.dir||'2W'), name:'set by the user', user:true}:null; }
+  s._case=null; s._dz=null; }
+function facKeyOf(bw){ if(!bw) return 'none'; if(bw.sub&&FAC_SPEC[bw.sub]) return bw.sub; if(bw.t==='Shared Lanes') return 'shared'; if(bw.t==='Local Street') return 'local'; if(bw.t==='Painted Lanes') return 'NB'; if(bw.t==='Protected Bike Lanes') return 'SL'; return 'none'; }
+function renderFacilityFields(s){ const rec=s.bwOrig!==undefined?s.bwOrig:s.bw; $('x-facrec').textContent='· recorded: '+(rec?facilityDesc(rec):'none'); const f=s.fac; $('x-fac').value=f?f.k:'auto'; const bw=s.bw; $('x-dir').value=f&&f.dir?f.dir:(bw&&bw.dir&&['2W','Bidirectional','OW'].includes(bw.dir)?bw.dir:'2W'); $('x-side').value=f&&f.side?f.side:'auto';
+  const oneSide=$('x-dir').value!=='2W'; $('x-side').disabled=!oneSide; $('x-dir').disabled=$('x-fac').value==='none'||$('x-fac').value==='shared'||$('x-fac').value==='local'; }
+['x-fac','x-dir','x-side'].forEach(id=>$(id).addEventListener('change',()=>{ const s=D.ctx.seg; const k=$('x-fac').value; const keep=ctxOverrides(D.ctx); delete keep.fac;
+  setUserFacility(s, k==='auto'?null:{k, dir:$('x-dir').value, side:$('x-side').value}); D.ctx=applyOverrides(segContext(s),keep); D.ctx.beforeW=null;
+  const cs=D.ctx.case; $('d-tag').innerHTML=`<span class="case ${cs.mode}">${cs.label}</span> ${s.u}${s.ow?' · one-way':''}${s.bus?' · bus':''}${s.truck?' · truck':''} · ${s.spd} km/h · ${D.ctx.ctc} m curb-to-curb${cs.existing?' · existing: '+cs.existing:''}`; $('dir-note').textContent=D.ctx.dirMode==='two'?'two-way required':D.ctx.dirMode==='one'?'one-way each side required':'';
+  renderFacilityFields(s); regenerate(); if(typeof showSV==='function') showSV(false); }));
 function openDesign(s){
-  D.ctx=segContext(s); const c=D.ctx;
+  // v3: a block kept in a proposal reopens with its existing-state edits (including the facility it was given) and (below) its saved design
+  const rec=(typeof propOf==='function'&&propOf(s.i))?propOf(s.i).blocks[s.i]:null; if(rec&&rec.x&&'fac' in rec.x) setUserFacility(s,rec.x.fac);
+  D.ctx=segContext(s); const c=D.ctx; if(rec) applyOverrides(c,rec.x); renderFacilityFields(s);
   $('d-title').textContent=titleCase(s.n)+' · '+(s.ix.filter(Boolean).map(i=>titleCase(i.x.split(' AND ').filter(n=>!n.startsWith(s.s)).join('/')||'')).filter(Boolean).join(' – ')||s.u);
   const cs=c.case; $('d-tag').title=cs.why; $('d-tag').innerHTML=`<span class="case ${cs.mode}">${cs.label}</span> ${s.u}${s.ow?' · one-way':''}${s.bus?' · bus':''}${s.truck?' · truck':''} · ${s.spd} km/h · ${s.ctc} m curb-to-curb${cs.existing?' · existing: '+cs.existing+(cs.when?' ('+cs.when+')':''):''}`;
   $('dir-note').textContent = c.dirMode==='two'?'two-way required':c.dirMode==='one'?'one-way each side required':'';
   { const sw=c.swW||RULES.sidewalk; $('sw-note').textContent = lvlOf(s)>0 ? `On a structure: the existing deck sidewalk (${fmt(sw)} m each side) is kept as it is — no sidewalk or boulevard is added; the design fits the existing carriageway.` : `Sidewalk + boulevard fixed at ${fmt(sw)} m each side — property lines cannot change.`; }
-  $('x-ctc').value=c.ctc; $('x-lanes').value=c.lanes; $('x-lL').textContent=c.lbl[0]; $('x-lR').textContent=c.lbl[1]; $('x-pL').value=c.park.L?1:0; $('x-pR').value=c.park.R?1:0; $('x-bus').value=c.bus?1:0; $('x-aadt').value='';
+  $('x-ctc').value=c.ctc; $('x-lanes').value=c.lanes; $('x-lL').textContent=c.lbl[0]; $('x-lR').textContent=c.lbl[1]; $('x-pL').value=c.park.L?1:0; $('x-pR').value=c.park.R?1:0; $('x-bus').value=c.bus?1:0; $('x-aadt').value=c.aadt==null?'':c.aadt;
   // show the screen first: the 2D renderers need a laid-out (non-zero) canvas before they can draw
-  showDesign(); regenerate(); setView(D.view);
+  showDesign(); regenerate();
+  if(rec&&!rec.auto){ D.options.push({...cloneJ(rec.opt), id:'P', custom:true, title:'Saved in '+propOf(s.i).name+' ('+(rec.opt.title||'')+')'}); D.cur=D.options.length-1; D.sel=null; renderChips(); renderAll(); }
+  renderPropNote(); if(typeof renderPropNav==='function') renderPropNav(); if(typeof refreshPhoto==='function') refreshPhoto();
+  setView(D.view);
+  if(typeof showSV==='function') showSV(false);   // v3: the street-view mini window for checking the existing street
 }
-['x-ctc','x-lanes','x-pL','x-pR','x-bus','x-aadt'].forEach(id=>$(id).addEventListener('change',()=>{ const c=D.ctx; c.ctc=Math.max(6,+$('x-ctc').value||c.ctc); c.swW=Math.max(1.8,Math.min(8,(c.seg.row-c.ctc)/2)); c.lanes=+$('x-lanes').value; c.park={L:$('x-pL').value==='1',R:$('x-pR').value==='1'}; c.bus=$('x-bus').value==='1'; const a=parseInt($('x-aadt').value,10); c.aadt=isNaN(a)?null:a; regenerate(true); }));
+// v3: the block's place in the project
+function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`in <b>${esc(p.name)}</b>${rec.auto?' (default option — save to keep this design)':' (designed)'}`:(activeProp()?'not in a proposal · saves to '+esc(activeProp().name):'not in a proposal'); }
+$('btn-prop').onclick=()=>{ const o=curOpt(); if(!o||!D.ctx) return; const p=propStore(D.ctx.seg,o,D.ctx); renderPropNote(); toast('Saved to '+p.name+' · '+Object.keys(p.blocks).length+' block'+(Object.keys(p.blocks).length===1?'':'s')+' — back to the map to continue'); };
+// v3: the existing widths — standard widths from the lane count and parking, editable when measured on site or in a photo;
+// the curb-to-curb follows the sum, and the proposed section is regenerated from it
+function applyBeforeW(){ const c=D.ctx, els=D.beforeEls; if(c.beforeW&&c.beforeW.length===els.length&&c.beforeW.every((w,i)=>els[i].k==='sw'||w>0)) els.forEach((e,i)=>{ if(e.k!=='sw') e.w=c.beforeW[i]; }); else c.beforeW=null; }
+function renderBeforeEdit(){ const box=$('bw-edit'); if(!box||!D.ctx) return; const c=D.ctx, els=D.beforeEls; const inner=els.filter(e=>e.k!=='sw'); const sum=inner.reduce((a,e)=>a+e.w,0);
+  box.innerHTML=`<div class="label" style="margin:10px 0 3px">Existing widths <span class="tag ${c.beforeW?'info':''}" style="text-transform:none;letter-spacing:0">${c.beforeW?'measured':'standard'}</span></div>`+els.map((e,i)=>e.k==='sw'?'':`<div class="erow2"><span style="width:12px;height:12px;border-radius:3px;background:${KCOL[e.k]};display:inline-block"></span><span>${elLabel(e,c)}</span><input type="number" step="0.1" min="0.5" max="8" value="${fmt(e.w)}" data-bi="${i}" title="Enter the measured width; the curb-to-curb follows"></div>`).join('')+`<div class="small muted" style="margin-top:3px">${inner.length} elements · ${fmt(sum)} m curb-to-curb${c.beforeW?' · <a href="#" data-act="bwreset">back to standard widths</a>':' (EDM standard widths: travel 3.0–3.5, parking 2.5, painted lane 1.5, protected 1.8 / two-way 3.0, buffer 0.6)'}</div>`;
+  box.querySelectorAll('input').forEach(inp=>inp.onchange=()=>{ const w=parseFloat(inp.value); if(isNaN(w)||w<0.5) return; c.beforeW=els.map(e=>e.k==='sw'?0:e.w); c.beforeW[+inp.dataset.bi]=Math.round(w*100)/100; const s2=els.reduce((a,e,i)=>a+(e.k==='sw'?0:c.beforeW[i]),0); c.ctc=Math.round(s2*10)/10; c.swW=Math.max(1.8,Math.min(8,(c.seg.row-c.ctc)/2)); $('x-ctc').value=c.ctc; regenerate(true); });
+  const r=box.querySelector('[data-act=bwreset]'); if(r) r.onclick=e=>{ e.preventDefault(); c.beforeW=null; c.ctc=c.seg.ctc; c.swW=Math.max(1.8,Math.min(8,(c.seg.row-c.ctc)/2)); $('x-ctc').value=c.ctc; regenerate(true); }; }
+['x-ctc','x-lanes','x-pL','x-pR','x-bus','x-aadt'].forEach(id=>$(id).addEventListener('change',()=>{ const c=D.ctx; if(id!=='x-aadt'&&id!=='x-bus') c.beforeW=null;   // v3: lanes / parking / curb-to-curb changed by hand: back to standard widths
+  c.ctc=Math.max(6,+$('x-ctc').value||c.ctc); c.swW=Math.max(1.8,Math.min(8,(c.seg.row-c.ctc)/2)); c.lanes=+$('x-lanes').value; c.park={L:$('x-pL').value==='1',R:$('x-pR').value==='1'}; c.bus=$('x-bus').value==='1'; const a=parseInt($('x-aadt').value,10); c.aadt=isNaN(a)?null:a; regenerate(true); }));
 function regenerate(keepCustom){
   const custom = keepCustom ? D.options.filter(o=>o.custom) : [];
   D.options=[...generateOptions(D.ctx), ...custom]; D.beforeEls=existingElements(D.ctx); D.cur=0; D.sel=null;   // v2: "before" includes the facility that is there today
+  if(typeof applyBeforeW==='function'){ applyBeforeW(); renderBeforeEdit(); if(typeof renderPropNote==='function') renderPropNote(); }   // v3
   if (!D.options.length) { $('warnings').innerHTML='<div class="msg err">No compliant layout fits: even two minimum travel lanes plus a minimum bike facility exceed the curb-to-curb width. Check the curb-to-curb value.</div>'; }
   renderChips(); renderAll();
 }
@@ -122,8 +156,14 @@ $('tg-anim').onclick=()=>{ D.anim=!D.anim; $('tg-anim').classList.toggle('on',D.
 $('tg-ctx').onclick=()=>{ D.city=!D.city; $('tg-ctx').classList.toggle('on',D.city); CTX_CACHE.id=null; redrawViews(); };
 // annotations = text and dimensions in every view (3D labels; plan street names, PL marks, dimension strings; section dimensions and element names)
 D.ann=true; $('tg-ann').onclick=()=>{ D.ann=!D.ann; $('tg-ann').classList.toggle('on',D.ann); redrawViews(); };
+// v3: the before / after panes split at a draggable divider (D.splitPct = the before pane's share of the width)
+D.splitPct=50;
+function applySplit(){ ['split3d','splitplan','splitsec'].forEach(id=>{ const el=$(id); el.style.gridTemplateColumns=D.before?`${D.splitPct}% 8px 1fr`:'1fr'; el.querySelectorAll('.divider').forEach(d=>d.style.display=D.before?'':'none'); }); }
+(function bindDividers(){ let drag=null; document.querySelectorAll('.divider').forEach(d=>d.addEventListener('mousedown',e=>{ drag={x0:e.clientX}; e.preventDefault(); document.body.style.cursor='col-resize'; }));
+  window.addEventListener('mousemove',e=>{ if(!drag) return; const vr=$('vp').getBoundingClientRect(); D.splitPct=clamp((e.clientX-vr.left)/vr.width*100, 20, 80); applySplit(); if(!drag.raf) drag.raf=requestAnimationFrame(()=>{ drag&&(drag.raf=null); redrawViews(); }); });
+  window.addEventListener('mouseup',()=>{ if(!drag) return; drag=null; document.body.style.cursor=''; redrawViews(); }); })();
 function setView(v){ D.view=v; $('c3d').style.display=v==='3d'?'block':'none'; $('split3d').style.display=v==='3d'?'grid':'none'; $('splitplan').style.display=v==='plan'?'grid':'none'; $('splitsec').style.display=v==='sec'?'grid':'none';
-  ['split3d','splitplan','splitsec'].forEach(id=>$(id).style.gridTemplateColumns=D.before?'1fr 1fr':'1fr'); $('p3d-b').style.display=D.before?'block':'none'; $('pp-b').style.display=D.before?'block':'none'; $('ps-b').style.display=D.before?'block':'none';
+  applySplit(); $('p3d-b').style.display=D.before?'block':'none'; $('pp-b').style.display=D.before?'block':'none'; $('ps-b').style.display=D.before?'block':'none';
   $('vhint').textContent = v==='3d' ? 'Drag to orbit · Scroll to zoom · Double-click to reset' : 'Scroll to zoom · Drag to pan · Double-click to reset';
   $('tg-anim').style.visibility = v==='sec'?'hidden':'visible';
   $('tg-edit').style.display = v==='3d'?'none':'';   // editing happens in plan and section only; the 3D view is a viewer
@@ -132,6 +172,7 @@ function redrawViews(){ const o=curOpt(); if(!o) return; const badge='PROPOSED �
   if (D.view==='plan') { if(D.before) drawPlanTo($('plan-b'), D.beforeEls, {before:true}); drawPlanTo($('plan-a'), o.els, {shared:o.sep==='shared', editable:o.sep!=='shared'}); }
   else if (D.view==='sec') { if(D.before) drawSectionTo($('sec-b'), D.beforeEls, {before:true}); drawSectionTo($('sec-a'), o.els, {editable:o.sep!=='shared'}); }
   else build3D();
+  if(typeof renderScorePane==='function') renderScorePane();   // v3: the Score view of the bottom panel, when it is showing
   showPop(); }
 $('tg-edit').onclick=()=>{ D.editOn=!D.editOn; $('tg-edit').classList.toggle('on',D.editOn); if(!D.editOn) D.sel=null; renderEditor(); redrawViews(); };
 window.addEventListener('resize',()=>{ if($('screen-design').classList.contains('active')) redrawViews(); });
