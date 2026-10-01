@@ -7,7 +7,7 @@ function showDesign(){ $('screen-map').classList.remove('active'); $('screen-des
 $('btn-back').onclick=()=>{ if(typeof propNavKeep==='function') propNavKeep(); const p=D.prop&&PROJ.proposals.find(x=>x.id===D.prop.id); showMap(); if(p) showPropCard(p); };   // v3: a proposal block's design is kept on the way back
 $('btn-collapse').onclick=()=>{ const b=$('bottom'); b.classList.toggle('collapsed'); $('btn-collapse').textContent=b.classList.contains('collapsed')?'▴ Show panel':'▾ Hide panel'; setTimeout(redrawViews,220); };
 // v3: the bottom panel shows either the design columns or the proposal's bike score
-function setBottomTab(t){ if(typeof setStep==='function') setStep(t==='score'?3:2); }   // v3: the bottom panel follows the step (04f_steps.js)
+function setBottomTab(t){ if(typeof setMode==='function') setMode(t==='score'?'review':'design'); }   // v3: the bottom panel follows the step (04f_steps.js)
 function defaultDesignClick(){ if(map.sel && designable(map.sel).ok){ D.prop=null; openDesign(map.sel); } else if(map.selBW){ const blk=blockOfBW(map.selBW); if(blk){ zoomTo(blk); selectSeg(blk); } } }
 $('c-design').onclick=defaultDesignClick;
 
@@ -25,6 +25,7 @@ function renderFacilityFields(s){ const rec=s.bwOrig!==undefined?s.bwOrig:s.bw; 
   renderFacilityFields(s); regenerate(); if(typeof showSV==='function') showSV(false); }));
 function openDesign(s){
   // v3: a block kept in a proposal reopens with its existing-state edits (including the facility it was given) and (below) its saved design
+  if(typeof ensureProposal==='function') ensureProposal(s);   // v3: every designed block is part of a proposal (one block = a one-block proposal)
   const rec=(typeof propOf==='function'&&propOf(s.i))?propOf(s.i).blocks[s.i]:null; if(rec&&rec.x&&'fac' in rec.x) setUserFacility(s,rec.x.fac);
   D.ctx=segContext(s); const c=D.ctx; if(rec) applyOverrides(c,rec.x); renderFacilityFields(s);
   $('d-title').textContent=titleCase(s.n)+' · '+(s.ix.filter(Boolean).map(i=>titleCase(i.x.split(' AND ').filter(n=>!n.startsWith(s.s)).join('/')||'')).filter(Boolean).join(' – ')||s.u);
@@ -34,15 +35,16 @@ function openDesign(s){
   $('x-ctc').value=c.ctc; $('x-lanes').value=c.lanes; $('x-lL').textContent=c.lbl[0]; $('x-lR').textContent=c.lbl[1]; $('x-pL').value=c.park.L?1:0; $('x-pR').value=c.park.R?1:0; $('x-bus').value=c.bus?1:0; $('x-aadt').value=c.aadt==null?'':c.aadt;
   // show the screen first: the 2D renderers need a laid-out (non-zero) canvas before they can draw
   showDesign(); regenerate();
-  if(rec&&!rec.auto){ D.options.push({...cloneJ(rec.opt), id:'P', custom:true, title:'Saved in '+propOf(s.i).name+' ('+(rec.opt.title||'')+')'}); D.cur=D.options.length-1; D.sel=null; renderChips(); renderAll(); }
+  if(rec&&!rec.auto){ const k=D.options.findIndex(o=>!o.custom&&o.sep===rec.opt.sep&&o.mode===rec.opt.mode);   // v3: the saved design takes its chip's place (A / B / C stay the options)
+    if(k>=0){ D.options[k]={...D.options[k], ...cloneJ(rec.opt), id:D.options[k].id, custom:false}; D.cur=k; } else { D.options.push({...cloneJ(rec.opt), id:'P', custom:true, title:'Saved in '+propOf(s.i).name+' ('+(rec.opt.title||'')+')'}); D.cur=D.options.length-1; } D.sel=null; renderChips(); renderAll(); }
   renderPropNote(); if(typeof renderPropNav==='function') renderPropNav(); if(typeof refreshPhoto==='function') refreshPhoto();
   setView(D.view);
   if(typeof showSV==='function') showSV(false);   // v3: the street-view mini window for checking the existing street
-  if(typeof setStep==='function') setStep(blockVerified()?2:1);   // v3: a block opens on step 1 (verify the existing street) unless it was confirmed before
+  if(typeof applyPropDir==='function') applyPropDir(); if(typeof setMode==='function') setMode((rec&&rec.verified)?'design':'verify');   // v3: a block opens on its existing view until verified, then on its design
 }
 // v3: the block's place in the project
-function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`in <b>${esc(p.name)}</b>${rec.auto?' (default option; save to keep this design)':' (designed)'}`:(activeProp()?'not in a proposal · saves to '+esc(activeProp().name):'not in a proposal'); }
-$('btn-prop').onclick=()=>{ const o=curOpt(); if(!o||!D.ctx) return; const p=propStore(D.ctx.seg,o,D.ctx); renderPropNote(); toast('Saved to '+p.name+' · '+Object.keys(p.blocks).length+' block'+(Object.keys(p.blocks).length===1?'':'s')+' — back to the map to continue'); };
+function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`saved as you edit · <b>${esc(p.name)}</b>`:''; }
+if($('btn-prop')) $('btn-prop').onclick=()=>{ const o=curOpt(); if(!o||!D.ctx) return; const p=propStore(D.ctx.seg,o,D.ctx); renderPropNote(); toast('Saved to '+p.name+' · '+Object.keys(p.blocks).length+' block'+(Object.keys(p.blocks).length===1?'':'s')+' — back to the map to continue'); };
 // v3: the existing widths — standard widths from the lane count and parking, editable when measured on site or in a photo;
 // the curb-to-curb follows the sum, and the proposed section is regenerated from it
 function applyBeforeW(){ const c=D.ctx, els=D.beforeEls; if(c.beforeW&&c.beforeW.length===els.length&&c.beforeW.every((w,i)=>els[i].k==='sw'||w>0)) els.forEach((e,i)=>{ if(e.k!=='sw') e.w=c.beforeW[i]; }); else c.beforeW=null; }
@@ -63,7 +65,7 @@ function curOpt(){ return D.options[D.cur]; }
 function renderChips(){ $('opt-chips').innerHTML=D.options.map((o,i)=>`<button class="chip ${i===D.cur?'active':''} ${o.custom?'custom':''}" data-i="${i}" title="${o.title}">${o.id}${o.custom?'':' · '+SEP[o.sep].name.split(' ')[0]}</button>`).join('');
   $('opt-chips').querySelectorAll('button').forEach(b=>b.onclick=()=>{ D.cur=+b.dataset.i; D.sel=null; renderChips(); renderAll(); }); }
 $('btn-revert').onclick=()=>{ const o=curOpt(); if(!o) return; if(o.custom){ D.cur=0; } else { const fresh=generateOptions(D.ctx).find(x=>x.id===o.id); if(fresh) D.options[D.cur]=fresh; } D.sel=null; renderChips(); renderAll(); };
-$('btn-save').onclick=()=>{ const o=curOpt(); if(!o) return; const n=D.options.filter(x=>x.custom).length+1; const id=String.fromCharCode(68+n-1); D.options.push({...JSON.parse(JSON.stringify(o)), id, custom:true, title:'Iteration '+n+' ('+o.title+')'}); D.cur=D.options.length-1; renderChips(); renderAll(); };
+if($('btn-save')) $('btn-save').onclick=()=>{ const o=curOpt(); if(!o) return; const n=D.options.filter(x=>x.custom).length+1; const id=String.fromCharCode(68+n-1); D.options.push({...JSON.parse(JSON.stringify(o)), id, custom:true, title:'Iteration '+n+' ('+o.title+')'}); D.cur=D.options.length-1; renderChips(); renderAll(); };
 
 // ── editor (v2): the cross-section is edited in the view — click an element, drag the handles — and the panel mirrors it ──
 const KNAME={sw:'Sidewalk + boulevard',bike:'Bike lane',buf:'Buffer',park:'Parking',travel:'Travel lane'};
@@ -129,7 +131,7 @@ function renderPanels(){ const o=curOpt(); if(!o) return; const c=D.ctx;
   const issues=checkCompliance(o,c); const errs=issues.filter(i=>i.lvl==='err').length, warns=issues.length-errs;
   $('status').innerHTML = errs? `<span class="tag err">Not compliant · ${errs} issue${errs>1?'s':''}</span>` : warns? `<span class="tag warn">Compliant with notes</span>` : `<span class="tag ok">Compliant</span>`;
   $('warnings').innerHTML = issues.length? issues.map(i=>`<div class="msg ${i.lvl}">${i.lvl==='err'?'⛔':'⚠'}<span>${i.msg}</span></div>`).join('') : '<div class="msg ok">✓<span>All widths meet the Engineering Design Manual (Tables 8-6, 8-7 and 8-10) and the lane connects to the network.</span></div>';
-  $('recs').innerHTML = recommendations(o,c).map(r=>`<div class="msg info">💡<span>${r}</span></div>`).join('');
+  $('recs').innerHTML = '<div class="msg" id="rec-score" style="background:#F8FAFC;color:var(--ink2)">Bike score gauge: …</div>'+recommendations(o,c).map(r=>`<div class="msg info">💡<span>${r}</span></div>`).join('');
   const pros=[], cons=[...(o.tradeoffs||[])];
   // v2: what changes against the facility that is there today
   const cs=c.case; if (cs.existing && o.sep!=='shared') { const bk=o.els.filter(e=>e.k==='bike'), bb=D.beforeEls.filter(e=>e.k==='bike');
@@ -148,7 +150,7 @@ function renderPanels(){ const o=curOpt(); if(!o) return; const c=D.ctx;
   $('summary').innerHTML = pros.map(p=>`<p class="pro">${p}</p>`).join('')+cons.map(p=>`<p class="con">${p}</p>`).join('');
   if(typeof updateLiveScore==='function') updateLiveScore();   // v3: the proposal's bike score with this design, live in the panel header
 }
-function renderAll(fromEditor){ if(!fromEditor) renderEditor(); else updateBar(); renderPanels(); redrawViews(); }
+function renderAll(fromEditor){ if(!fromEditor) renderEditor(); else updateBar(); renderPanels(); redrawViews(); if(typeof autoSaveDesign==='function') autoSaveDesign(); }   // v3: the design autosaves to the proposal
 
 // view plumbing
 $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('tabs').querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); setView(b.dataset.v); });
