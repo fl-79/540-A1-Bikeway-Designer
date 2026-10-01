@@ -146,6 +146,7 @@ function renderPanels(){ const o=curOpt(); if(!o) return; const c=D.ctx;
   if (o.sep==='extruded' && cs.mode==='permanent') cons.push('Extruded curb keeps the street-level lane: cheapest permanent form, but sweeping and snow clearing need narrow equipment');
   if (o.mode==='two' && ((c.ln.L||[]).length+(c.ln.R||[]).length)) cons.push('Two-way operation adds contra-flow conflicts at laneways and intersections');
   $('summary').innerHTML = pros.map(p=>`<p class="pro">${p}</p>`).join('')+cons.map(p=>`<p class="con">${p}</p>`).join('');
+  if(typeof updateLiveScore==='function') updateLiveScore();   // v3: the proposal's bike score with this design, live in the panel header
 }
 function renderAll(fromEditor){ if(!fromEditor) renderEditor(); else updateBar(); renderPanels(); redrawViews(); }
 
