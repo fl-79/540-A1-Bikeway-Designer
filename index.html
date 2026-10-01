@@ -256,6 +256,12 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 .card-steps{margin:4px 0 8px}.card-steps span{cursor:default}.card-steps span[data-act]{cursor:pointer}.card-steps span.done b{background:var(--green);color:#fff}.card-steps span.on{color:var(--accent);font-weight:600}
 .srow{font-weight:700;font-size:12px;margin-left:6px}.srow small{font-weight:500;color:var(--ink2);margin-left:2px}
 .scorechip{display:none;cursor:pointer;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#F8FAFC;font-size:12px;white-space:nowrap}.scorechip:hover{border-color:var(--ink3)}.scorechip b{font-size:14px}
+.stepbar{display:flex;align-items:center;gap:16px;padding:6px 14px;border-bottom:1px solid var(--line);background:#fff;font-size:12px;flex-shrink:0}
+.stepbar .stp{display:flex;align-items:center;gap:7px;color:var(--ink3);cursor:pointer;user-select:none;white-space:nowrap}.stepbar .stp>span{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap}.stepbar .stp b.n,.stepbar .stp span b,.stepbar .stp span small{display:inline;width:auto;height:auto;background:none;border-radius:0}.stepbar .stp:hover{color:var(--ink)}
+.stepbar .stp b{width:19px;height:19px;border-radius:50%;background:#E2E8F0;color:var(--ink2);display:grid;place-items:center;font-size:11px;font-weight:600}
+.stepbar .stp.active{color:var(--ink);font-weight:600}.stepbar .stp.active b{background:var(--accent);color:#fff}.stepbar .stp.done b{background:var(--green);color:#fff}
+.stepbar .pnav{display:flex;align-items:center;gap:4px;color:var(--ink2)}.stepbar .pnav button{padding:0 7px;line-height:20px}
+.bverify,.breview{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--ink2)}.bverify>div:first-child,.breview>div:first-child{max-width:60%}
 </style>
 </head>
 <body>
@@ -308,15 +314,20 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 <div id="screen-design">
   <div class="topbar">
     <span class="title" id="d-title">—</span><span class="tag" id="d-tag"></span>
-    <span class="pnav" id="pnav" style="display:none"></span>
     <div class="grow"></div>
-    <button class="small" id="btn-verify" title="Check lanes, parking and the existing facility against a street photo">📷 Verify street</button>
     <div class="tabs" id="tabs"><button data-v="3d" class="active">3D</button><button data-v="plan">Plan</button><button data-v="sec">Section</button></div>
     <span class="toggle on" id="tg-before" title="Show the existing street beside the proposal"><i></i>Show existing</span>
     <span class="toggle" id="tg-anim"><i></i>Animate</span>
     <span class="toggle on" id="tg-ctx"><i></i>City context</span>
     <span class="toggle on" id="tg-edit" title="Show the width handles and element selection in Plan and Section"><i></i>Edit in view</span>
     <span class="toggle on" id="tg-ann" title="Street names, traffic labels, dimensions and element names in 3D, plan and section (north arrow and scale bar always stay)"><i></i>Labels &amp; dimensions</span>
+  </div>
+  <div class="stepbar" id="stepbar">
+    <span class="stp" data-step="1" title="Check the recorded street against a photo and the existing drawings; correct it in the panel on the left"><b>1</b><span>Verify existing</span></span>
+    <span class="stp" data-step="2" title="Design the cross-section: existing and proposed side by side, the design panel below"><b>2</b><span>Design proposal</span></span>
+    <span class="stp" data-step="3" title="The proposal's bike score and statistics; save, next block, done"><b>3</b><span id="stp3">Review &amp; score</span></span>
+    <span class="grow"></span><span class="pnav" id="pnav"></span>
+    <button class="ghost small" id="step-back" style="visibility:hidden">← Design</button><button class="small primary" id="step-next">Existing street is correct → Design</button>
   </div>
   <div class="body">
     <div class="side" id="side">
@@ -353,19 +364,21 @@ header .sub{font-size:11.5px;color:var(--ink2)}
       <input class="inl" id="inl" type="text" inputmode="decimal" spellcheck="false">
     </div>
     <div class="bottom" id="bottom">
-      <div class="bhead">
+      <div class="bverify" id="bverify"><div><b>Step 1 · Verify the existing street.</b> The drawings above and the Street View on the left show the street as recorded (lanes, parking, bikeway, widths). If the street differs, correct it in the panel on the left — the proposal is built from these values.</div><div class="grow"></div><button class="ghost small" id="bv-skip" title="Go to the design without confirming">Skip for now</button><button class="primary" id="bv-ok">Existing street is correct → Design</button></div>
+      <div class="bhead" id="bhead">
         <button class="ghost small" id="btn-collapse">▾ Hide panel</button>
         <div class="opts" id="opt-chips"></div>
-        <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button><button class="small primary" id="btn-prop" title="Keep this block's design in the active proposal on the map">Save to proposal</button><span class="small" id="prop-note"></span>
+        <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button><button class="small primary" id="btn-prop" title="Keep this block's design in the active proposal on the map">Save to proposal</button><button class="small" id="apply-all" style="display:none" title="Solve every block of the proposal with this option's separation and direction">Apply to all blocks</button><span class="small" id="prop-note"></span>
         <span class="status" id="status"></span>
         <span class="scorechip" id="score-live" title="Bike score around the proposal with the design being edited — click for the details"></span>
         <div class="grow"></div><span class="small muted" id="dir-note"></span>
-        <div class="tabs btabs"><button id="bt-design" class="active" title="Existing configuration summary, section editor, compliance, recommendations">Design</button><button id="bt-score" title="Bike score and statistics of the proposal this block belongs to">Bike score &amp; statistics</button></div>
+        <button class="small" id="bh-next" title="Go on to the score and the save actions">Next: review &amp; score →</button>
       </div>
+      <div class="breview" id="breview" style="display:none"><div><b>Step 3 · Review.</b> The score below is for the whole proposal with this block's design. Save it, go on to the next block, or finish.</div><div class="grow"></div><button class="ghost small" id="br-back">← Back to design</button><button class="small" id="br-save">Save to proposal</button><button class="small" id="br-next">Next block ›</button><button class="small primary" id="br-done">Done · back to map</button></div>
       <div class="bscore stats" id="bscore" style="display:none"></div>
       <div class="bcols" id="bcols">
         <div class="sec"><h4>Option summary</h4><div class="prosCons" id="summary"></div>
-          <div class="small muted" style="margin-top:10px">Edit the existing street (lanes, parking, bikeway, widths) in the <b>street panel</b> on the left — ◀ collapses it, ▶ or 📷 brings it back.</div>
+          <div class="small muted" style="margin-top:10px">Edit the existing street (lanes, parking, bikeway, widths) in the <b>street panel</b> on the left (step 1 opens it; ◀ / ▶ fold it away and back).</div>
         </div>
         <div class="sec editor"><h4>Design the section <span class="small muted mono" id="ed-total"></span></h4>
           <div class="steps">
@@ -1587,8 +1600,7 @@ function showDesign(){ $('screen-map').classList.remove('active'); $('screen-des
 $('btn-back').onclick=()=>{ if(typeof propNavKeep==='function') propNavKeep(); const p=D.prop&&PROJ.proposals.find(x=>x.id===D.prop.id); showMap(); if(p) showPropCard(p); };   // v3: a proposal block's design is kept on the way back
 $('btn-collapse').onclick=()=>{ const b=$('bottom'); b.classList.toggle('collapsed'); $('btn-collapse').textContent=b.classList.contains('collapsed')?'▴ Show panel':'▾ Hide panel'; setTimeout(redrawViews,220); };
 // v3: the bottom panel shows either the design columns or the proposal's bike score
-function setBottomTab(t){ $('bcols').style.display=t==='score'?'none':''; $('bscore').style.display=t==='score'?'':'none'; $('bt-design').classList.toggle('active',t!=='score'); $('bt-score').classList.toggle('active',t==='score'); $('bottom').classList.remove('collapsed'); $('btn-collapse').textContent='▾ Hide panel'; if(t==='score'&&typeof renderScorePane==='function') renderScorePane(); }
-$('bt-design').onclick=()=>setBottomTab('design'); $('bt-score').onclick=()=>setBottomTab('score');
+function setBottomTab(t){ if(typeof setStep==='function') setStep(t==='score'?3:2); }   // v3: the bottom panel follows the step (04f_steps.js)
 function defaultDesignClick(){ if(map.sel && designable(map.sel).ok){ D.prop=null; openDesign(map.sel); } else if(map.selBW){ const blk=blockOfBW(map.selBW); if(blk){ zoomTo(blk); selectSeg(blk); } } }
 $('c-design').onclick=defaultDesignClick;
 
@@ -1619,6 +1631,7 @@ function openDesign(s){
   renderPropNote(); if(typeof renderPropNav==='function') renderPropNav(); if(typeof refreshPhoto==='function') refreshPhoto();
   setView(D.view);
   if(typeof showSV==='function') showSV(false);   // v3: the street-view mini window for checking the existing street
+  if(typeof setStep==='function') setStep(blockVerified()?2:1);   // v3: a block opens on step 1 (verify the existing street) unless it was confirmed before
 }
 // v3: the block's place in the project
 function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`in <b>${esc(p.name)}</b>${rec.auto?' (default option; save to keep this design)':' (designed)'}`:(activeProp()?'not in a proposal · saves to '+esc(activeProp().name):'not in a proposal'); }
@@ -1739,19 +1752,20 @@ $('tg-ctx').onclick=()=>{ D.city=!D.city; $('tg-ctx').classList.toggle('on',D.ci
 D.ann=true; $('tg-ann').onclick=()=>{ D.ann=!D.ann; $('tg-ann').classList.toggle('on',D.ann); redrawViews(); };
 // v3: the before / after panes split at a draggable divider (D.splitPct = the before pane's share of the width)
 D.splitPct=50;
-function applySplit(){ ['split3d','splitplan','splitsec'].forEach(id=>{ const el=$(id); el.style.gridTemplateColumns=D.before?`${D.splitPct}% 8px 1fr`:'1fr'; el.querySelectorAll('.divider').forEach(d=>d.style.display=D.before?'':'none'); }); }
+function applySplit(){ const split=D.before&&!D.only; ['split3d','splitplan','splitsec'].forEach(id=>{ const el=$(id); el.style.gridTemplateColumns=split?`${D.splitPct}% 8px 1fr`:'1fr'; el.querySelectorAll('.divider').forEach(d=>d.style.display=split?'':'none'); }); }
 (function bindDividers(){ let drag=null; document.querySelectorAll('.divider').forEach(d=>d.addEventListener('mousedown',e=>{ drag={x0:e.clientX}; e.preventDefault(); document.body.style.cursor='col-resize'; }));
   window.addEventListener('mousemove',e=>{ if(!drag) return; const vr=$('vp').getBoundingClientRect(); D.splitPct=clamp((e.clientX-vr.left)/vr.width*100, 20, 80); applySplit(); if(!drag.raf) drag.raf=requestAnimationFrame(()=>{ drag&&(drag.raf=null); redrawViews(); }); });
   window.addEventListener('mouseup',()=>{ if(!drag) return; drag=null; document.body.style.cursor=''; redrawViews(); }); })();
 function setView(v){ D.view=v; $('c3d').style.display=v==='3d'?'block':'none'; $('split3d').style.display=v==='3d'?'grid':'none'; $('splitplan').style.display=v==='plan'?'grid':'none'; $('splitsec').style.display=v==='sec'?'grid':'none';
-  applySplit(); $('p3d-b').style.display=D.before?'block':'none'; $('pp-b').style.display=D.before?'block':'none'; $('ps-b').style.display=D.before?'block':'none';
+  applySplit(); const showB=D.before||D.only==='before', showA=D.only!=='before'; ['p3d-b','pp-b','ps-b'].forEach(id=>$(id).style.display=showB?'block':'none'); ['p3d-a','pp-a','ps-a'].forEach(id=>$(id).style.display=showA?'block':'none');   // v3: step 1 shows the existing street alone
   $('vhint').textContent = v==='3d' ? 'Drag to orbit · Scroll to zoom · Double-click to reset' : 'Scroll to zoom · Drag to pan · Double-click to reset';
   $('tg-anim').style.visibility = v==='sec'?'hidden':'visible';
   $('tg-edit').style.display = v==='3d'?'none':'';   // editing happens in plan and section only; the 3D view is a viewer
   redrawViews(); if(v==='3d') setAnim(D.anim); else stop3D(); anim2D(D.anim&&v==='plan'); }
 function redrawViews(){ const o=curOpt(); if(!o) return; const badge='PROPOSED · OPTION '+o.id; ['b3d','bplan','bsec'].forEach(id=>$(id).textContent=badge);
-  if (D.view==='plan') { if(D.before) drawPlanTo($('plan-b'), D.beforeEls, {before:true}); drawPlanTo($('plan-a'), o.els, {shared:o.sep==='shared', editable:o.sep!=='shared'}); }
-  else if (D.view==='sec') { if(D.before) drawSectionTo($('sec-b'), D.beforeEls, {before:true}); drawSectionTo($('sec-a'), o.els, {editable:o.sep!=='shared'}); }
+  const onlyB=D.only==='before';
+  if (D.view==='plan') { if(D.before||onlyB) drawPlanTo($('plan-b'), D.beforeEls, {before:true}); if(!onlyB) drawPlanTo($('plan-a'), o.els, {shared:o.sep==='shared', editable:o.sep!=='shared'}); }
+  else if (D.view==='sec') { if(D.before||onlyB) drawSectionTo($('sec-b'), D.beforeEls, {before:true}); if(!onlyB) drawSectionTo($('sec-a'), o.els, {editable:o.sep!=='shared'}); }
   else build3D();
   if(typeof renderScorePane==='function') renderScorePane();   // v3: the Score view of the bottom panel, when it is showing
   showPop(); }
@@ -1852,8 +1866,8 @@ function showPropCard(p,focus,opts){ p=p||activeProp(); if(!p) return; opts=opts
   $('c-title').textContent=p.name; $('c-sub').textContent=`${n} block${n===1?'':'s'} · ${(propLen(p)/1000).toFixed(2)} km · ${map.mode==='add'?'click blocks to add or remove':map.mode==='route'?'click a start and an end block to fill a route':'proposal'}`;
   const cases={}; order.forEach(s=>{ const m=designCase(s).mode; cases[m]=(cases[m]||0)+1; }); const caseN={new:'new lane',upgrade:'upgrade to protected lane',permanent:'make permanent',review:'review existing lane'};
   // v3: the score first, then the three steps — build (blocks), verify (street photos), design (block by block, the whole proposal in the drawings)
-  const S=n?propStats(p):null; const designed=order.filter(s=>!p.blocks[s.i].auto).length; const det=!!(opts.details||(showPropCard.open===p.id+':det')), ver=!!(opts.verify||(showPropCard.open===p.id+':ver'));
-  const steps=`<div class="steps card-steps"><span class="${n?'done':''}"><b>1</b>Build · ${n} block${n===1?'':'s'}</span><span class="${ver?'on':''}" data-act="verify" title="Check the recorded lanes, parking and bikeway of each block against a street photo before designing"><b>2</b>Verify streets</span><span class="${designed?'done':''}" title="Design the cross-section block by block; the plan and 3D views show the whole proposal"><b>3</b>Design · ${designed} of ${n}</span></div>`;
+  const S=n?propStats(p):null; const designed=order.filter(s=>!p.blocks[s.i].auto).length; const verified=order.filter(s=>p.blocks[s.i].verified).length; const det=!!(opts.details||(showPropCard.open===p.id+':det')), ver=!!(opts.verify||(showPropCard.open===p.id+':ver'));
+  const steps=`<div class="steps card-steps"><span class="${n?'done':''}"><b>1</b>Build · ${n} block${n===1?'':'s'}</span><span class="${ver?'on':''} ${n&&verified===n?'done':''}" data-act="verify" title="Each block opens on its own step 1 (the existing street with a Street View); this strip is the sampled overview"><b>2</b>Verify streets · ${verified} of ${n}</span><span class="${designed?'done':''}" title="Design the cross-section block by block; the plan and 3D views show the whole proposal"><b>3</b>Design · ${designed} of ${n}</span></div>`;
   $('c-case').innerHTML=n?(S?scoreBoxHTML(S,'box'):'')+steps+`<div id="c-sdet" class="stats" style="display:${det?'':'none'}">${S?statsHTML(p,S):''}</div><div id="c-verify" style="display:${ver?'':'none'}"><div class="label" style="margin-top:6px">Verify streets</div><div class="stats-photos small muted">…</div></div>`+Object.entries(cases).map(([k,c])=>`<span class="case ${k}">${c} × ${caseN[k]||k}</span> `).join('')+`<div class="casewhy">${focus?'<b>'+esc(titleCase(focus.n))+'</b> selected · '+focus.u.toLowerCase()+' · '+focus.len+' m · '+designCase(focus).label.toLowerCase()+'. ':''}Each block uses the default option (A) until you design it. The drawings show the whole proposal; the cross-section is designed block by block (‹ › moves along the route).</div>`:'<div class="casewhy">No blocks yet. Click blocks on the map, or a start and an end block with Route fill.</div>';
   const cc=$('c-case'); const sdBtn=cc.querySelector('[data-act=sdet]'); if(sdBtn){ sdBtn.textContent=det?'Details ▴':'Details ▾'; sdBtn.onclick=()=>{ showPropCard.open=det?null:p.id+':det'; showPropCard(p,focus); }; }
   const vBtn=cc.querySelector('[data-act=verify]'); if(vBtn) vBtn.onclick=()=>{ showPropCard.open=ver?null:p.id+':ver'; showPropCard(p,focus); };
@@ -1869,17 +1883,18 @@ function showPropCard(p,focus,opts){ p=p||activeProp(); if(!p) return; opts=opts
 function openProposalDesign(p,idx){ const order=propOrder(p); if(!order.length) return; idx=clamp(idx||0,0,order.length-1); D.prop={id:p.id, order:order.map(s=>s.i), idx}; openDesign(order[idx]); }
 function propNavKeep(){ if(!D.prop||!D.ctx) return; const p=PROJ.proposals.find(x=>x.id===D.prop.id); if(!p) return; const o=curOpt(); if(!o) return; const rec=p.blocks[D.ctx.seg.i]; if(rec&&rec.auto&&!o.custom&&!o.edited&&o.id==='A'&&JSON.stringify(ctxOverrides(D.ctx))===JSON.stringify(rec.x)) return;   // untouched default with no existing-state edits: leave it as the default
   propStore(D.ctx.seg,o,D.ctx); }
-function renderPropNav(){ const el=$('pnav'); if(!D.prop){ el.style.display='none'; return; } const p=PROJ.proposals.find(x=>x.id===D.prop.id); if(!p){ D.prop=null; el.style.display='none'; return; } const n=D.prop.order.length, i=D.prop.idx;
-  el.style.display=''; el.innerHTML=`<b>${esc(p.name)}</b> · block ${i+1} of ${n} <button data-act="prev" ${i<=0?'disabled':''} title="Previous block (keeps this design)">‹</button><button data-act="next" ${i>=n-1?'disabled':''} title="Next block (keeps this design)">›</button><button class="wide" data-act="all" title="Solve every block of the proposal with this option's separation and direction">Apply to all blocks</button><button class="wide" data-act="done" title="Keep this design and return to the map">Done · back to map</button>`;
-  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ const a=b.dataset.act; propNavKeep(); if(a==='prev'||a==='next'){ D.prop.idx+=a==='next'?1:-1; openDesign(SEGS[D.prop.order[D.prop.idx]]); }
-    else if(a==='all'){ const o=curOpt(); let n2=0, near=0; const rank=s=>SEP_RANK[s]||0;
+// v3: the block navigator lives in the step bar; "Apply to all blocks" in the design panel; Done is step 3's action
+function renderPropNav(){ const el=$('pnav'); const ap=$('apply-all'); if(!el) return; if(!D.prop){ el.innerHTML=''; if(ap) ap.style.display='none'; return; } const p=PROJ.proposals.find(x=>x.id===D.prop.id); if(!p){ D.prop=null; el.innerHTML=''; if(ap) ap.style.display='none'; return; } const n=D.prop.order.length, i=D.prop.idx;
+  const ver=D.prop.order.filter(k=>p.blocks[k]&&p.blocks[k].verified).length;
+  el.innerHTML=`<b>${esc(p.name)}</b> · block ${i+1} of ${n}${ver?` · ${ver} verified`:''} <button data-act="prev" ${i<=0?'disabled':''} title="Previous block (keeps this design)">‹</button><button data-act="next" ${i>=n-1?'disabled':''} title="Next block (keeps this design)">›</button>`;
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ const a=b.dataset.act; propNavKeep(); D.prop.idx+=a==='next'?1:-1; openDesign(SEGS[D.prop.order[D.prop.idx]]); });
+  if(ap){ ap.style.display=''; ap.onclick=()=>{ propNavKeep(); { const o=curOpt(); let n2=0, near=0; const rank=s=>SEP_RANK[s]||0;
       D.prop.order.forEach(i=>{ const s=SEGS[i]; if(s===D.ctx.seg) return; const rec=p.blocks[i]; const c=applyOverrides(segContext(s),rec&&rec.x); const opts=generateOptions(c); if(!opts.length) return;
         // the same separation and direction where that block's case allows it, else the nearest separation in the durability order
         if(rec&&rec.x&&'fac' in rec.x&&typeof setUserFacility==='function'){ setUserFacility(s,rec.x.fac); }
         const m=opts.find(x=>x.sep===o.sep&&x.mode===o.mode)||opts.find(x=>x.sep===o.sep)||opts.slice().sort((a,b)=>(Math.abs(rank(a.sep)-rank(o.sep))-Math.abs(rank(b.sep)-rank(o.sep)))||((a.mode===o.mode?0:1)-(b.mode===o.mode?0:1)))[0];
         if(m.sep!==o.sep) near++; p.blocks[i]={i, opt:cloneJ(m), x:ctxOverrides(c), auto:false}; n2++; });
-      projChanged(); toast(SEP[o.sep].name.split(' (')[0]+' · '+(o.mode==='two'?'two-way':'one-way each side')+' applied to '+n2+' other blocks, each solved for its own width'+(near?' ('+near+' took the nearest separation their case allows)':''), 4000); renderPropNote(); }
-    else if(a==='done'){ showMap(); showPropCard(p); } }); }
+      projChanged(); toast(SEP[o.sep].name.split(' (')[0]+' · '+(o.mode==='two'?'two-way':'one-way each side')+' applied to '+n2+' other blocks, each solved for its own width'+(near?' ('+near+' took the nearest separation their case allows)':''), 4000); renderPropNote(); } }; } }
 function toast(msg,ms){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(toast.t); toast.t=setTimeout(()=>t.style.display='none', ms||2600); }
 
 // ── the project panel ──
@@ -2010,11 +2025,11 @@ function scoreBoxHTML(S, mode){ const sc=S.score; const pc=v=>Math.round(v); con
   return `<div class="scorebox"><div class="num" style="color:${col}">${pc(a)}</div><div class="grow"><div><b>Bike score</b> around the proposal</div><div class="small muted">${pc(b)} before → ${pc(a)} after <b style="color:${d>=0?'var(--green)':'var(--red)'}">${sgn(d)}</b> · ${band[1]}</div></div><button class="ghost small" data-act="sdet" title="Statistics: how the score is built, connections, grades, photos">Details ▾</button></div>`; }
 // the design page: the proposal's score with the option being edited in place of this block's saved design, recomputed (debounced)
 // whenever the design changes; click → the Bike score tab
-function updateLiveScore(){ const el=$('bt-score'); if(!el||!D.ctx) return; /* the Bike score tab itself carries the live number */ clearTimeout(updateLiveScore.t); updateLiveScore.t=setTimeout(()=>{ const s=D.ctx.seg; const o=curOpt(); if(!o) return; let p=propOf(s.i); const extra={i:s.i, sep:o.sep};
+function updateLiveScore(){ const el=$('stp3'); if(!el||!D.ctx) return; /* step 3's label in the step bar carries the live number */ clearTimeout(updateLiveScore.t); updateLiveScore.t=setTimeout(()=>{ const s=D.ctx.seg; const o=curOpt(); if(!o) return; let p=propOf(s.i); const extra={i:s.i, sep:o.sep};
     if(!p) p={id:'tmp', name:'', blocks:{[s.i]:{i:s.i, opt:o, x:ctxOverrides(D.ctx), auto:false}}};
     const key=(p.id)+'|'+Object.keys(p.blocks).join(',')+'|'+o.sep; if(updateLiveScore.key===key) return; updateLiveScore.key=key;
-    const S=propStats(p, extra); const sc=S.score; if(!sc||!sc.after){ el.textContent='Bike score & statistics'; return; } const a=sc.after.total, d=a-sc.before.total;
-    el.innerHTML=`Bike score <b style="color:${scoreColor(a)}">${Math.round(a)}</b> <small style="color:${d>=0?'var(--green)':'var(--red)'}">${(d>=0?'+':'')+(Math.abs(d)<10?d.toFixed(1):Math.round(d))}</small>${p.id==='tmp'?' <small class="muted">this block</small>':''} · statistics`; el.title='Bike score around '+(p.id==='tmp'?'this block':p.name)+' with the design being edited: '+Math.round(sc.before.total)+' before → '+Math.round(a)+' after. Click for the details.'; }, 200); }
+    const S=propStats(p, extra); const sc=S.score; if(!sc||!sc.after){ el.textContent='Review & score'; return; } const a=sc.after.total, d=a-sc.before.total;
+    el.innerHTML=`Review &amp; score · <b style="color:${scoreColor(a)}">${Math.round(a)}</b> <small style="color:${d>=0?'var(--green)':'var(--red)'}">${(d>=0?'+':'')+(Math.abs(d)<10?d.toFixed(1):Math.round(d))}</small>`; el.title='Bike score around '+(p.id==='tmp'?'this block':p.name)+' with the design being edited: '+Math.round(sc.before.total)+' before → '+Math.round(a)+' after. Click for the details.'; }, 200); }
 function bindStats(box,p){ const m=box.querySelector('[data-act=method]'); if(m) m.onclick=e=>{ e.preventDefault(); $('method').classList.add('show'); }; const ph=box.querySelector('.stats-photos'); if(ph&&typeof renderPhotoStrip==='function') renderPhotoStrip(p, ph); }
 function showStats(id){ const p=PROJ.proposals.find(x=>x.id===id)||activeProp(); if(!p) return; PROJ.active=p.id; showPropCard(p, null, {details:true}); }   // v3: the details open inside the proposal card
 // the Score tab of the design screen: the proposal this block belongs to, or the block on its own as a one-block proposal
@@ -2078,7 +2093,7 @@ function showSV(force){ const c=D.ctx; if(!c) return; const s=c.seg; const w=$('
 // the street panel collapses into the left edge (◀ / ▶ tab); the panorama alone can be folded with ▾
 function sideTabText(){ const col=$('side').classList.contains('collapsed'); $('side-tab').textContent=col?'▶':'◀'; $('side-tab').title=col?'Expand the street panel':'Collapse the street panel'; }
 function toggleSide(force){ const sd=$('side'); const col=force===undefined?!sd.classList.contains('collapsed'):!!force; sd.classList.toggle('collapsed',col); sideTabText(); setTimeout(redrawViews,200); }
-$('side-tab').onclick=()=>toggleSide(); $('btn-verify').onclick=()=>{ if($('side').classList.contains('collapsed')) showSV(true); else toggleSide(true); };
+$('side-tab').onclick=()=>toggleSide(); if($('btn-verify')) $('btn-verify').onclick=()=>{ if($('side').classList.contains('collapsed')) showSV(true); else toggleSide(true); };
 $('sv-flip').onclick=()=>{ SV.flip=!SV.flip; SV.reload=true; showSV(true); }; $('sv-min').onclick=()=>{ const w=$('svwin'); w.classList.toggle('min'); $('sv-min').textContent=w.classList.contains('min')?'▴':'▾'; };
 // the sampled strip for a proposal: a photo at the first block and wherever the recorded lanes / width change from the previous
 // block along the proposal, and at least every 400 m (see README: why not "every four blocks")
@@ -2140,6 +2155,45 @@ if($('vol-file')) $('vol-file').addEventListener('change',e=>{ const f=e.target.
       if(!out.length) throw new Error('no usable rows'); PROJ.volumes=PROJ.volumes.concat(out); PROJ.layers.vol=true; projChanged(); toast(out.length+' count points imported from '+f.name); }catch(err){ toast('Import failed: '+err.message, 4000); } }; r.readAsText(f); e.target.value=''; });
 function parseCSV(txt){ const rows=[]; let row=[], cell='', q=false; for(let i=0;i<txt.length;i++){ const ch=txt[i]; if(q){ if(ch==='"'){ if(txt[i+1]==='"'){ cell+='"'; i++; } else q=false; } else cell+=ch; } else if(ch==='"') q=true; else if(ch===','||ch===';'||ch==='\t'){ row.push(cell); cell=''; } else if(ch==='\n'||ch==='\r'){ if(cell!==''||row.length){ row.push(cell); rows.push(row); } row=[]; cell=''; if(ch==='\r'&&txt[i+1]==='\n') i++; } else cell+=ch; } if(cell!==''||row.length){ row.push(cell); rows.push(row); } return rows; }
 renderLegend(); renderProj();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v3: THE DESIGN SCREEN AS THREE STEPS — 1 Verify existing · 2 Design proposal · 3 Review & score
+// ═══════════════════════════════════════════════════════════════════════════
+// A proposal spans many blocks but a cross-section belongs to one block, so the steps run per block: a block opens on step 1
+// (only the existing street, full width, with the Street View panel and the editable existing configuration), the user
+// confirms it ("Existing street is correct"), step 2 puts existing and proposed side by side with the design panel, and step 3
+// shows the proposal's score and the save / next-block / done actions. A confirmed block is marked `verified` in the proposal,
+// so it reopens on step 2 and the proposal card can count the blocks checked. The step bar also carries the block navigator.
+D.step=1; D.only=null;   // D.only = 'before': the viewport shows the existing street alone (step 1)
+function stepRec(){ const s=D.ctx&&D.ctx.seg; if(!s) return null; const p=typeof propOf==='function'?propOf(s.i):null; return p?p.blocks[s.i]:null; }
+function blockVerified(){ const r=stepRec(); return r?!!r.verified:!!(D.ctx&&D.ctx.seg._verified); }
+function setStep(n){ n=clamp(n,1,3); D.step=n; const scr=$('screen-design'); scr.dataset.step=n;
+  document.querySelectorAll('#stepbar .stp').forEach(e=>{ const k=+e.dataset.step; e.classList.toggle('active',k===n); e.classList.toggle('done',k<n||(k===1&&blockVerified())); });
+  D.only = n===1?'before':null;
+  if(n===1){ D.before=true; $('tg-before').classList.add('on'); if(typeof toggleSide==='function') toggleSide(false); if(typeof showSV==='function') showSV(false); }
+  else if(typeof toggleSide==='function') toggleSide(true);
+  $('tg-before').style.display = n===1?'none':''; $('tg-anim').style.display = n===1?'none':'';
+  $('bverify').style.display = n===1?'':'none'; $('bhead').style.display = n===2?'':'none'; $('bcols').style.display = n===2?'':'none';
+  $('breview').style.display = n===3?'':'none'; $('bscore').style.display = n===3?'':'none';
+  $('bottom').classList.remove('collapsed'); $('btn-collapse').textContent='▾ Hide panel';
+  renderStepBar(); setView(D.view); if(n===3&&typeof renderScorePane==='function') renderScorePane(); }
+// the step bar's right side: what comes next from here
+function renderStepBar(){ const n=D.step; const nx=$('step-next'); if(!nx) return;
+  nx.textContent = n===1?'Existing street is correct → Design':n===2?'Next: review & score →':'Done · back to map';
+  nx.onclick = n===1?()=>verifyBlock():n===2?()=>setStep(3):()=>stepDone();
+  const bk=$('step-back'); bk.style.visibility = n>1?'visible':'hidden'; bk.textContent = n===2?'← Existing street':'← Design'; bk.onclick=()=>setStep(n-1);
+  if(typeof renderPropNav==='function') renderPropNav(); }
+// step 1 → 2: the existing street as recorded (or as corrected in the panel) is confirmed for this block
+function verifyBlock(){ const r=stepRec(); if(r) r.verified=true; else if(D.ctx) D.ctx.seg._verified=true; if(r&&typeof projChanged==='function') projChanged(); setStep(2); toast('Existing street confirmed — now design the proposal'); }
+function skipVerify(){ setStep(2); }
+// step 3 actions: keep the design in the proposal, go on to the next block (which opens on its own step 1 unless verified), or finish
+function stepSave(){ if(typeof propNavKeep==='function'&&D.prop) propNavKeep(); else if($('btn-prop')) $('btn-prop').click(); renderStepBar(); if(typeof renderPropNote==='function') renderPropNote(); }
+function stepNextBlock(){ if(!D.prop) return; if(typeof propNavKeep==='function') propNavKeep(); if(D.prop.idx<D.prop.order.length-1){ D.prop.idx++; openDesign(SEGS[D.prop.order[D.prop.idx]]); } else stepDone(); }
+function stepDone(){ if(typeof propNavKeep==='function') propNavKeep(); const p=D.prop&&PROJ.proposals.find(x=>x.id===D.prop.id); showMap(); if(p) showPropCard(p); else if(activeProp()) showPropCard(activeProp()); }
+(function bindSteps(){ document.querySelectorAll('#stepbar .stp').forEach(e=>e.onclick=()=>setStep(+e.dataset.step));
+  const on=(id,f)=>{ const el=$(id); if(el) el.onclick=f; };
+  on('bv-ok',verifyBlock); on('bv-skip',skipVerify); on('br-back',()=>setStep(2)); on('br-save',stepSave); on('br-next',stepNextBlock); on('br-done',stepDone);
+  on('bh-next',()=>setStep(3)); })();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2D RENDERERS — plan and section (dimensions scale-invariant on zoom)
@@ -2778,15 +2832,15 @@ function init3D(){ if(T3.renderer) return; const c=$('c3d'); T3.renderer=new THR
   let drag=null; c.addEventListener('mousedown',e=>{drag=[e.clientX,e.clientY];}); window.addEventListener('mousemove',e=>{ if(!drag) return; T3.az-= (e.clientX-drag[0])*0.006; T3.el=clamp(T3.el+(e.clientY-drag[1])*0.005,0.08,1.5); drag=[e.clientX,e.clientY]; updateCam(); render3D(); }); window.addEventListener('mouseup',()=>drag=null);
   c.addEventListener('wheel',e=>{ e.preventDefault(); T3.zoom=clamp(T3.zoom*Math.exp(-e.deltaY*0.0012),0.18,12); updateCam(); render3D(); },{passive:false});   // zoom out far enough to see the whole site plate
   c.addEventListener('dblclick',()=>{ T3.az=-Math.PI/4; T3.el=Math.atan(1/Math.sqrt(2)); T3.zoom=1; updateCam(); render3D(); }); }
-function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; const halves=D.before?2:1; const aspect=(W/halves)/H; const ext=T3.extent; const span=Math.max(ext.len*0.75, ext.w*1.6)/T3.zoom; T3.cam.left=-span*aspect/2; T3.cam.right=span*aspect/2; T3.cam.top=span/2; T3.cam.bottom=-span/2; T3.cam.updateProjectionMatrix();
+function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; const halves=(D.before&&!D.only)?2:1; const aspect=(W/halves)/H; const ext=T3.extent; const span=Math.max(ext.len*0.75, ext.w*1.6)/T3.zoom; T3.cam.left=-span*aspect/2; T3.cam.right=span*aspect/2; T3.cam.top=span/2; T3.cam.bottom=-span/2; T3.cam.updateProjectionMatrix();
   const t=T3.target; T3.cam.position.set(t.x+T3.dist*Math.cos(T3.el)*Math.sin(T3.az), t.y+T3.dist*Math.sin(T3.el), t.z+T3.dist*Math.cos(T3.el)*Math.cos(T3.az)); T3.cam.lookAt(t); scaleLabels(); }
 function render3D(){ const r=T3.renderer, c=$('c3d'); const W=c.clientWidth*devicePixelRatio, H=c.clientHeight*devicePixelRatio; if(c.width!==W||c.height!==H){ r.setSize(c.clientWidth,c.clientHeight,false); }
   r.setScissorTest(true);
   const pc=T3.propCtx;   // v3: the proposal's other blocks show in the proposed view only
-  if (D.before) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const dpr=devicePixelRatio; const wb=Math.round((pb.right-cr.left)*dpr), xa=Math.round((pa.left-cr.left)*dpr);   // the panes' own widths (draggable divider)
+  if (D.before&&!D.only) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const dpr=devicePixelRatio; const wb=Math.round((pb.right-cr.left)*dpr), xa=Math.round((pa.left-cr.left)*dpr);   // the panes' own widths (draggable divider)
     T3.groups.after.visible=false; T3.groups.before.visible=true; if(pc) pc.visible=false; r.setViewport(0,0,wb,H); r.setScissor(0,0,wb,H); r.render(T3.scene,T3.cam);
     T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; r.setViewport(xa,0,W-xa,H); r.setScissor(xa,0,W-xa,H); r.render(T3.scene,T3.cam); }
-  else { T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }
+  else { const bf=D.only==='before'; T3.groups.before.visible=bf; T3.groups.after.visible=!bf; if(pc) pc.visible=!bf; r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }   // v3: step 1 — the existing street alone, full width
 
 function build3D(){ init3D(); const o=curOpt(); if(!o) return; ['before','after'].forEach(k=>{ if(T3.groups[k]) T3.scene.remove(T3.groups[k]); }); T3.movers=[]; T3.labels=[];
   TZ0 = elevAt(o && D.ctx ? D.ctx.seg.g[0][0] : 0, D.ctx.seg.g[0][1]);

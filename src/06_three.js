@@ -58,15 +58,15 @@ function init3D(){ if(T3.renderer) return; const c=$('c3d'); T3.renderer=new THR
   let drag=null; c.addEventListener('mousedown',e=>{drag=[e.clientX,e.clientY];}); window.addEventListener('mousemove',e=>{ if(!drag) return; T3.az-= (e.clientX-drag[0])*0.006; T3.el=clamp(T3.el+(e.clientY-drag[1])*0.005,0.08,1.5); drag=[e.clientX,e.clientY]; updateCam(); render3D(); }); window.addEventListener('mouseup',()=>drag=null);
   c.addEventListener('wheel',e=>{ e.preventDefault(); T3.zoom=clamp(T3.zoom*Math.exp(-e.deltaY*0.0012),0.18,12); updateCam(); render3D(); },{passive:false});   // zoom out far enough to see the whole site plate
   c.addEventListener('dblclick',()=>{ T3.az=-Math.PI/4; T3.el=Math.atan(1/Math.sqrt(2)); T3.zoom=1; updateCam(); render3D(); }); }
-function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; const halves=D.before?2:1; const aspect=(W/halves)/H; const ext=T3.extent; const span=Math.max(ext.len*0.75, ext.w*1.6)/T3.zoom; T3.cam.left=-span*aspect/2; T3.cam.right=span*aspect/2; T3.cam.top=span/2; T3.cam.bottom=-span/2; T3.cam.updateProjectionMatrix();
+function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; const halves=(D.before&&!D.only)?2:1; const aspect=(W/halves)/H; const ext=T3.extent; const span=Math.max(ext.len*0.75, ext.w*1.6)/T3.zoom; T3.cam.left=-span*aspect/2; T3.cam.right=span*aspect/2; T3.cam.top=span/2; T3.cam.bottom=-span/2; T3.cam.updateProjectionMatrix();
   const t=T3.target; T3.cam.position.set(t.x+T3.dist*Math.cos(T3.el)*Math.sin(T3.az), t.y+T3.dist*Math.sin(T3.el), t.z+T3.dist*Math.cos(T3.el)*Math.cos(T3.az)); T3.cam.lookAt(t); scaleLabels(); }
 function render3D(){ const r=T3.renderer, c=$('c3d'); const W=c.clientWidth*devicePixelRatio, H=c.clientHeight*devicePixelRatio; if(c.width!==W||c.height!==H){ r.setSize(c.clientWidth,c.clientHeight,false); }
   r.setScissorTest(true);
   const pc=T3.propCtx;   // v3: the proposal's other blocks show in the proposed view only
-  if (D.before) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const dpr=devicePixelRatio; const wb=Math.round((pb.right-cr.left)*dpr), xa=Math.round((pa.left-cr.left)*dpr);   // the panes' own widths (draggable divider)
+  if (D.before&&!D.only) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const dpr=devicePixelRatio; const wb=Math.round((pb.right-cr.left)*dpr), xa=Math.round((pa.left-cr.left)*dpr);   // the panes' own widths (draggable divider)
     T3.groups.after.visible=false; T3.groups.before.visible=true; if(pc) pc.visible=false; r.setViewport(0,0,wb,H); r.setScissor(0,0,wb,H); r.render(T3.scene,T3.cam);
     T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; r.setViewport(xa,0,W-xa,H); r.setScissor(xa,0,W-xa,H); r.render(T3.scene,T3.cam); }
-  else { T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }
+  else { const bf=D.only==='before'; T3.groups.before.visible=bf; T3.groups.after.visible=!bf; if(pc) pc.visible=!bf; r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }   // v3: step 1 — the existing street alone, full width
 
 function build3D(){ init3D(); const o=curOpt(); if(!o) return; ['before','after'].forEach(k=>{ if(T3.groups[k]) T3.scene.remove(T3.groups[k]); }); T3.movers=[]; T3.labels=[];
   TZ0 = elevAt(o && D.ctx ? D.ctx.seg.g[0][0] : 0, D.ctx.seg.g[0][1]);

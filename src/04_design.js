@@ -7,8 +7,7 @@ function showDesign(){ $('screen-map').classList.remove('active'); $('screen-des
 $('btn-back').onclick=()=>{ if(typeof propNavKeep==='function') propNavKeep(); const p=D.prop&&PROJ.proposals.find(x=>x.id===D.prop.id); showMap(); if(p) showPropCard(p); };   // v3: a proposal block's design is kept on the way back
 $('btn-collapse').onclick=()=>{ const b=$('bottom'); b.classList.toggle('collapsed'); $('btn-collapse').textContent=b.classList.contains('collapsed')?'▴ Show panel':'▾ Hide panel'; setTimeout(redrawViews,220); };
 // v3: the bottom panel shows either the design columns or the proposal's bike score
-function setBottomTab(t){ $('bcols').style.display=t==='score'?'none':''; $('bscore').style.display=t==='score'?'':'none'; $('bt-design').classList.toggle('active',t!=='score'); $('bt-score').classList.toggle('active',t==='score'); $('bottom').classList.remove('collapsed'); $('btn-collapse').textContent='▾ Hide panel'; if(t==='score'&&typeof renderScorePane==='function') renderScorePane(); }
-$('bt-design').onclick=()=>setBottomTab('design'); $('bt-score').onclick=()=>setBottomTab('score');
+function setBottomTab(t){ if(typeof setStep==='function') setStep(t==='score'?3:2); }   // v3: the bottom panel follows the step (04f_steps.js)
 function defaultDesignClick(){ if(map.sel && designable(map.sel).ok){ D.prop=null; openDesign(map.sel); } else if(map.selBW){ const blk=blockOfBW(map.selBW); if(blk){ zoomTo(blk); selectSeg(blk); } } }
 $('c-design').onclick=defaultDesignClick;
 
@@ -39,6 +38,7 @@ function openDesign(s){
   renderPropNote(); if(typeof renderPropNav==='function') renderPropNav(); if(typeof refreshPhoto==='function') refreshPhoto();
   setView(D.view);
   if(typeof showSV==='function') showSV(false);   // v3: the street-view mini window for checking the existing street
+  if(typeof setStep==='function') setStep(blockVerified()?2:1);   // v3: a block opens on step 1 (verify the existing street) unless it was confirmed before
 }
 // v3: the block's place in the project
 function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`in <b>${esc(p.name)}</b>${rec.auto?' (default option; save to keep this design)':' (designed)'}`:(activeProp()?'not in a proposal · saves to '+esc(activeProp().name):'not in a proposal'); }
@@ -159,19 +159,20 @@ $('tg-ctx').onclick=()=>{ D.city=!D.city; $('tg-ctx').classList.toggle('on',D.ci
 D.ann=true; $('tg-ann').onclick=()=>{ D.ann=!D.ann; $('tg-ann').classList.toggle('on',D.ann); redrawViews(); };
 // v3: the before / after panes split at a draggable divider (D.splitPct = the before pane's share of the width)
 D.splitPct=50;
-function applySplit(){ ['split3d','splitplan','splitsec'].forEach(id=>{ const el=$(id); el.style.gridTemplateColumns=D.before?`${D.splitPct}% 8px 1fr`:'1fr'; el.querySelectorAll('.divider').forEach(d=>d.style.display=D.before?'':'none'); }); }
+function applySplit(){ const split=D.before&&!D.only; ['split3d','splitplan','splitsec'].forEach(id=>{ const el=$(id); el.style.gridTemplateColumns=split?`${D.splitPct}% 8px 1fr`:'1fr'; el.querySelectorAll('.divider').forEach(d=>d.style.display=split?'':'none'); }); }
 (function bindDividers(){ let drag=null; document.querySelectorAll('.divider').forEach(d=>d.addEventListener('mousedown',e=>{ drag={x0:e.clientX}; e.preventDefault(); document.body.style.cursor='col-resize'; }));
   window.addEventListener('mousemove',e=>{ if(!drag) return; const vr=$('vp').getBoundingClientRect(); D.splitPct=clamp((e.clientX-vr.left)/vr.width*100, 20, 80); applySplit(); if(!drag.raf) drag.raf=requestAnimationFrame(()=>{ drag&&(drag.raf=null); redrawViews(); }); });
   window.addEventListener('mouseup',()=>{ if(!drag) return; drag=null; document.body.style.cursor=''; redrawViews(); }); })();
 function setView(v){ D.view=v; $('c3d').style.display=v==='3d'?'block':'none'; $('split3d').style.display=v==='3d'?'grid':'none'; $('splitplan').style.display=v==='plan'?'grid':'none'; $('splitsec').style.display=v==='sec'?'grid':'none';
-  applySplit(); $('p3d-b').style.display=D.before?'block':'none'; $('pp-b').style.display=D.before?'block':'none'; $('ps-b').style.display=D.before?'block':'none';
+  applySplit(); const showB=D.before||D.only==='before', showA=D.only!=='before'; ['p3d-b','pp-b','ps-b'].forEach(id=>$(id).style.display=showB?'block':'none'); ['p3d-a','pp-a','ps-a'].forEach(id=>$(id).style.display=showA?'block':'none');   // v3: step 1 shows the existing street alone
   $('vhint').textContent = v==='3d' ? 'Drag to orbit · Scroll to zoom · Double-click to reset' : 'Scroll to zoom · Drag to pan · Double-click to reset';
   $('tg-anim').style.visibility = v==='sec'?'hidden':'visible';
   $('tg-edit').style.display = v==='3d'?'none':'';   // editing happens in plan and section only; the 3D view is a viewer
   redrawViews(); if(v==='3d') setAnim(D.anim); else stop3D(); anim2D(D.anim&&v==='plan'); }
 function redrawViews(){ const o=curOpt(); if(!o) return; const badge='PROPOSED · OPTION '+o.id; ['b3d','bplan','bsec'].forEach(id=>$(id).textContent=badge);
-  if (D.view==='plan') { if(D.before) drawPlanTo($('plan-b'), D.beforeEls, {before:true}); drawPlanTo($('plan-a'), o.els, {shared:o.sep==='shared', editable:o.sep!=='shared'}); }
-  else if (D.view==='sec') { if(D.before) drawSectionTo($('sec-b'), D.beforeEls, {before:true}); drawSectionTo($('sec-a'), o.els, {editable:o.sep!=='shared'}); }
+  const onlyB=D.only==='before';
+  if (D.view==='plan') { if(D.before||onlyB) drawPlanTo($('plan-b'), D.beforeEls, {before:true}); if(!onlyB) drawPlanTo($('plan-a'), o.els, {shared:o.sep==='shared', editable:o.sep!=='shared'}); }
+  else if (D.view==='sec') { if(D.before||onlyB) drawSectionTo($('sec-b'), D.beforeEls, {before:true}); if(!onlyB) drawSectionTo($('sec-a'), o.els, {editable:o.sep!=='shared'}); }
   else build3D();
   if(typeof renderScorePane==='function') renderScorePane();   // v3: the Score view of the bottom panel, when it is showing
   showPop(); }

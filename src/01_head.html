@@ -256,6 +256,12 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 .card-steps{margin:4px 0 8px}.card-steps span{cursor:default}.card-steps span[data-act]{cursor:pointer}.card-steps span.done b{background:var(--green);color:#fff}.card-steps span.on{color:var(--accent);font-weight:600}
 .srow{font-weight:700;font-size:12px;margin-left:6px}.srow small{font-weight:500;color:var(--ink2);margin-left:2px}
 .scorechip{display:none;cursor:pointer;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#F8FAFC;font-size:12px;white-space:nowrap}.scorechip:hover{border-color:var(--ink3)}.scorechip b{font-size:14px}
+.stepbar{display:flex;align-items:center;gap:16px;padding:6px 14px;border-bottom:1px solid var(--line);background:#fff;font-size:12px;flex-shrink:0}
+.stepbar .stp{display:flex;align-items:center;gap:7px;color:var(--ink3);cursor:pointer;user-select:none;white-space:nowrap}.stepbar .stp>span{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap}.stepbar .stp b.n,.stepbar .stp span b,.stepbar .stp span small{display:inline;width:auto;height:auto;background:none;border-radius:0}.stepbar .stp:hover{color:var(--ink)}
+.stepbar .stp b{width:19px;height:19px;border-radius:50%;background:#E2E8F0;color:var(--ink2);display:grid;place-items:center;font-size:11px;font-weight:600}
+.stepbar .stp.active{color:var(--ink);font-weight:600}.stepbar .stp.active b{background:var(--accent);color:#fff}.stepbar .stp.done b{background:var(--green);color:#fff}
+.stepbar .pnav{display:flex;align-items:center;gap:4px;color:var(--ink2)}.stepbar .pnav button{padding:0 7px;line-height:20px}
+.bverify,.breview{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--ink2)}.bverify>div:first-child,.breview>div:first-child{max-width:60%}
 </style>
 </head>
 <body>
@@ -308,15 +314,20 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 <div id="screen-design">
   <div class="topbar">
     <span class="title" id="d-title">—</span><span class="tag" id="d-tag"></span>
-    <span class="pnav" id="pnav" style="display:none"></span>
     <div class="grow"></div>
-    <button class="small" id="btn-verify" title="Check lanes, parking and the existing facility against a street photo">📷 Verify street</button>
     <div class="tabs" id="tabs"><button data-v="3d" class="active">3D</button><button data-v="plan">Plan</button><button data-v="sec">Section</button></div>
     <span class="toggle on" id="tg-before" title="Show the existing street beside the proposal"><i></i>Show existing</span>
     <span class="toggle" id="tg-anim"><i></i>Animate</span>
     <span class="toggle on" id="tg-ctx"><i></i>City context</span>
     <span class="toggle on" id="tg-edit" title="Show the width handles and element selection in Plan and Section"><i></i>Edit in view</span>
     <span class="toggle on" id="tg-ann" title="Street names, traffic labels, dimensions and element names in 3D, plan and section (north arrow and scale bar always stay)"><i></i>Labels &amp; dimensions</span>
+  </div>
+  <div class="stepbar" id="stepbar">
+    <span class="stp" data-step="1" title="Check the recorded street against a photo and the existing drawings; correct it in the panel on the left"><b>1</b><span>Verify existing</span></span>
+    <span class="stp" data-step="2" title="Design the cross-section: existing and proposed side by side, the design panel below"><b>2</b><span>Design proposal</span></span>
+    <span class="stp" data-step="3" title="The proposal's bike score and statistics; save, next block, done"><b>3</b><span id="stp3">Review &amp; score</span></span>
+    <span class="grow"></span><span class="pnav" id="pnav"></span>
+    <button class="ghost small" id="step-back" style="visibility:hidden">← Design</button><button class="small primary" id="step-next">Existing street is correct → Design</button>
   </div>
   <div class="body">
     <div class="side" id="side">
@@ -353,19 +364,21 @@ header .sub{font-size:11.5px;color:var(--ink2)}
       <input class="inl" id="inl" type="text" inputmode="decimal" spellcheck="false">
     </div>
     <div class="bottom" id="bottom">
-      <div class="bhead">
+      <div class="bverify" id="bverify"><div><b>Step 1 · Verify the existing street.</b> The drawings above and the Street View on the left show the street as recorded (lanes, parking, bikeway, widths). If the street differs, correct it in the panel on the left — the proposal is built from these values.</div><div class="grow"></div><button class="ghost small" id="bv-skip" title="Go to the design without confirming">Skip for now</button><button class="primary" id="bv-ok">Existing street is correct → Design</button></div>
+      <div class="bhead" id="bhead">
         <button class="ghost small" id="btn-collapse">▾ Hide panel</button>
         <div class="opts" id="opt-chips"></div>
-        <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button><button class="small primary" id="btn-prop" title="Keep this block's design in the active proposal on the map">Save to proposal</button><span class="small" id="prop-note"></span>
+        <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button><button class="small primary" id="btn-prop" title="Keep this block's design in the active proposal on the map">Save to proposal</button><button class="small" id="apply-all" style="display:none" title="Solve every block of the proposal with this option's separation and direction">Apply to all blocks</button><span class="small" id="prop-note"></span>
         <span class="status" id="status"></span>
         <span class="scorechip" id="score-live" title="Bike score around the proposal with the design being edited — click for the details"></span>
         <div class="grow"></div><span class="small muted" id="dir-note"></span>
-        <div class="tabs btabs"><button id="bt-design" class="active" title="Existing configuration summary, section editor, compliance, recommendations">Design</button><button id="bt-score" title="Bike score and statistics of the proposal this block belongs to">Bike score &amp; statistics</button></div>
+        <button class="small" id="bh-next" title="Go on to the score and the save actions">Next: review &amp; score →</button>
       </div>
+      <div class="breview" id="breview" style="display:none"><div><b>Step 3 · Review.</b> The score below is for the whole proposal with this block's design. Save it, go on to the next block, or finish.</div><div class="grow"></div><button class="ghost small" id="br-back">← Back to design</button><button class="small" id="br-save">Save to proposal</button><button class="small" id="br-next">Next block ›</button><button class="small primary" id="br-done">Done · back to map</button></div>
       <div class="bscore stats" id="bscore" style="display:none"></div>
       <div class="bcols" id="bcols">
         <div class="sec"><h4>Option summary</h4><div class="prosCons" id="summary"></div>
-          <div class="small muted" style="margin-top:10px">Edit the existing street (lanes, parking, bikeway, widths) in the <b>street panel</b> on the left — ◀ collapses it, ▶ or 📷 brings it back.</div>
+          <div class="small muted" style="margin-top:10px">Edit the existing street (lanes, parking, bikeway, widths) in the <b>street panel</b> on the left (step 1 opens it; ◀ / ▶ fold it away and back).</div>
         </div>
         <div class="sec editor"><h4>Design the section <span class="small muted mono" id="ed-total"></span></h4>
           <div class="steps">

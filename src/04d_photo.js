@@ -52,7 +52,7 @@ function showSV(force){ const c=D.ctx; if(!c) return; const s=c.seg; const w=$('
 // the street panel collapses into the left edge (◀ / ▶ tab); the panorama alone can be folded with ▾
 function sideTabText(){ const col=$('side').classList.contains('collapsed'); $('side-tab').textContent=col?'▶':'◀'; $('side-tab').title=col?'Expand the street panel':'Collapse the street panel'; }
 function toggleSide(force){ const sd=$('side'); const col=force===undefined?!sd.classList.contains('collapsed'):!!force; sd.classList.toggle('collapsed',col); sideTabText(); setTimeout(redrawViews,200); }
-$('side-tab').onclick=()=>toggleSide(); $('btn-verify').onclick=()=>{ if($('side').classList.contains('collapsed')) showSV(true); else toggleSide(true); };
+$('side-tab').onclick=()=>toggleSide(); if($('btn-verify')) $('btn-verify').onclick=()=>{ if($('side').classList.contains('collapsed')) showSV(true); else toggleSide(true); };
 $('sv-flip').onclick=()=>{ SV.flip=!SV.flip; SV.reload=true; showSV(true); }; $('sv-min').onclick=()=>{ const w=$('svwin'); w.classList.toggle('min'); $('sv-min').textContent=w.classList.contains('min')?'▴':'▾'; };
 // the sampled strip for a proposal: a photo at the first block and wherever the recorded lanes / width change from the previous
 // block along the proposal, and at least every 400 m (see README: why not "every four blocks")
