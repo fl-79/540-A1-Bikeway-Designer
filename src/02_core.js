@@ -153,7 +153,7 @@ const SEP = {
   barrier: {name:'Concrete barrier',            prot:'High',    cost:'$$',  bufKind:'barrier', h:0.69, maxSpd:80, maxAadt:1e9},
   shared:  {name:'Local street bikeway (shared, traffic-calmed)', prot:'Low', cost:'$', bufKind:'none', h:0, maxSpd:30, maxAadt:1500},
   // v2: the permanent end of the range, and a painted buffer with no posts (used to draw existing painted lanes)
-  raised:  {name:'Raised bike lane (intermediate level, concrete curb both sides)', prot:'High', cost:'$$$$', bufKind:'raisedlane', h:0.15, maxSpd:80, maxAadt:1e9, permanent:true},
+  raised:  {name:'Raised bike lane (concrete curb both sides)', prot:'High', cost:'$$$$', bufKind:'raisedlane', h:0.15, maxSpd:80, maxAadt:1e9, permanent:true},
   paint:   {name:'Painted buffer (no physical separation)', prot:'None', cost:'$', bufKind:'paint', h:0.0, maxSpd:50, maxAadt:6000},
 };
 // durability order used by the "make permanent" case (Rapid Implementation Guide Figure 32 protection levels and Tables 3–9 durability)
@@ -167,14 +167,14 @@ function facilityDesc(bw){ if(!bw) return 'no facility'; const sub=SUBTYPE[bw.su
   return (sub||(bw.t==='Local Street'?'local street bikeway (shared)':bw.t==='Shared Lanes'?'shared lanes (sharrows)':bw.t.toLowerCase()))+(dir?' ('+dir+')':''); }
 function designCase(s){ if(s._case) return s._case; const bw=s.bw; let c;
   const when=bw?[bw.yr?'built '+bw.yr:null, bw.up?'upgraded '+bw.up:null].filter(Boolean).join(', '):'';
-  const flags=bw?[bw.aaa?'AAA network':'not on the AAA network', bw.aaaSeg?'AAA segment':null, bw.snow?'snow-cleared':null, bw.route?bw.route:null].filter(Boolean):[];
+  const flags=bw?[bw.aaa?'on the All Ages and Abilities (AAA) network':'not on the All Ages and Abilities (AAA) network', bw.aaaSeg?'AAA segment':null, bw.snow?'snow-cleared':null, bw.route?bw.route:null].filter(Boolean):[];
   if(!bw) c={mode:'new', label:'New protected lane', button:'Design a new bike lane →', why:'No facility on this block.'};
   else if(bw.sub==='OSS'||bw.sub==='OSB') c={mode:'offstreet', label:'Off-street path', button:'Not a roadway design', why:'An '+SUBTYPE[bw.sub]+' already serves this block; the roadway does not need a lane.'};
-  else if(bw.t==='Painted Lanes'||bw.t==='Shared Lanes'||/^(NB|PBT|PBP|PBPT)$/.test(bw.sub||'')) c={mode:'upgrade', label:'Upgrade to protected', button:'Upgrade to a protected lane →', why:'Existing '+facilityDesc(bw)+': painted lanes and sharrows are not All Ages & Abilities (EDM §8.5.3.4, §8.5.3.5); the options add physical separation.'};
-  else if(bw.t==='Local Street') c=(s.u==='Residential')?{mode:'new', label:'Local-street bikeway (AAA by design) · new lane optional', button:'Design a separated lane anyway →', why:'A traffic-calmed local street bikeway is AAA on a residential street; a separated lane is optional here.'}
-                                  :{mode:'upgrade', label:'Upgrade to protected', button:'Upgrade to a protected lane →', why:'A shared local-street bikeway on a '+s.u.toLowerCase()+' is not AAA (EDM §8.5.3.5).'};
-  else if(bw.sub==='R') c={mode:'review', label:'Existing raised lane · review', button:'Review the existing lane →', why:'A raised protected lane is already the permanent form; the tool checks widths and intersections rather than proposing a new separation.'};
-  else c={mode:'permanent', label:'Make permanent', button:'Make the protected lane permanent →', why:'Existing '+facilityDesc(bw)+'. The layer does not record its separation material, so the options are the durable end of the Rapid Implementation Guide range (Figure 32): extruded curb, raised lane, barrier.'};
+  else if(bw.t==='Painted Lanes'||bw.t==='Shared Lanes'||/^(NB|PBT|PBP|PBPT)$/.test(bw.sub||'')) c={mode:'upgrade', label:'Upgrade to protected lane', button:'Upgrade to a protected lane →', why:'Existing '+facilityDesc(bw)+': painted lanes and sharrows are not All Ages and Abilities (Engineering Design Manual §8.5.3.4, §8.5.3.5); the options add physical separation.'};
+  else if(bw.t==='Local Street') c=(s.u==='Residential')?{mode:'new', label:'Local street bikeway · separated lane optional', button:'Design a separated lane anyway →', why:'A traffic-calmed local street bikeway already counts as All Ages and Abilities on a residential street; a separated lane is optional here.'}
+                                  :{mode:'upgrade', label:'Upgrade to protected lane', button:'Upgrade to a protected lane →', why:'A shared local street bikeway on a '+s.u.toLowerCase()+' is not All Ages and Abilities (Engineering Design Manual §8.5.3.5).'};
+  else if(bw.sub==='R') c={mode:'review', label:'Review existing raised lane', button:'Review the existing lane →', why:'A raised protected lane is already the permanent form; the tool checks widths and intersections rather than proposing a new separation.'};
+  else c={mode:'permanent', label:'Make protected lane permanent', button:'Make the protected lane permanent →', why:'Existing '+facilityDesc(bw)+'. The layer does not record its separation material, so the options are the durable end of the Rapid Implementation Guide range (Figure 32): extruded curb, raised lane, barrier.'};
   c.existing=bw?facilityDesc(bw):null; c.when=when; c.flags=flags; c.note=bw&&bw.note?bw.note:null; return s._case=c; }
 
 // ── Segment context ──────────────────────────────────────────────────────────
@@ -319,7 +319,7 @@ function fitConfig(ctx, mode, sep, twoSide) {
 // ── Compliance & recommendations ────────────────────────────────────────────
 function checkCompliance(opt, ctx) {
   const out=[]; const E=opt.els; const push=(lvl,msg)=>out.push({lvl,msg});
-  if (opt.sep==='shared') { if (ctx.spd>30 || ctx.seg.u==='Arterial' || ctx.seg.u==='Secondary Arterial') push('err','A shared local-street bikeway is not All Ages & Abilities above 30 km/h or on arterials (EDM §8.5.3.5). Use a protected facility.'); else if (ctx.aadt!==null && ctx.aadt>1500) push('warn',`Local street bikeways suit < 1,500 veh/day; this block is at ${ctx.aadt.toLocaleString()}. Add diverters to cut through-traffic.`); else push('warn','Shared bikeway: confirm volumes are below 1,500 veh/day and add traffic calming; sharrows must be centred in the lane (BC Safe Passing Law).'); return out; }
+  if (opt.sep==='shared') { if (ctx.spd>30 || ctx.seg.u==='Arterial' || ctx.seg.u==='Secondary Arterial') push('err','A shared local street bikeway is not All Ages and Abilities above 30 km/h or on arterials (Engineering Design Manual §8.5.3.5). Use a protected lane.'); else if (ctx.aadt!==null && ctx.aadt>1500) push('warn',`Local street bikeways suit < 1,500 veh/day; this block is at ${ctx.aadt.toLocaleString()}. Add diverters to cut through-traffic.`); else push('warn','Shared bikeway: confirm volumes are below 1,500 veh/day and add traffic calming; sharrows must be centred in the lane (BC Safe Passing Law).'); return out; }
   const sum=E.filter(e=>e.k!=='sw').reduce((s,e)=>s+e.w,0);
   const diff=sum-ctx.ctc;
   const rowSum=E.reduce((s,e)=>s+e.w,0); if (Math.abs(rowSum-ctx.seg.row)>0.06) push('warn', `Section totals ${fmt(rowSum)} m against a ${fmt(ctx.seg.row)} m right-of-way — the sidewalk edge would no longer meet the property line, so the sidewalk would jog at each end of the block.`);
@@ -359,10 +359,10 @@ function recommendations(opt, ctx) {
   const R=[]; const E=opt.els; const sum=E.filter(e=>e.k!=='sw').reduce((s,e)=>s+e.w,0); const spare=ctx.ctc-sum;
   // v2: the case comes first
   const cs=ctx.case||designCase(ctx.seg); const bw=ctx.seg.bw;
-  if (cs.mode==='upgrade') R.push(`Upgrade: the existing ${cs.existing}${cs.when?' ('+cs.when+')':''} is not All Ages & Abilities; painted lanes and sharrows give no physical protection (EDM §8.5.3.4, §8.5.3.5). This option replaces it with ${SEP[opt.sep].name.toLowerCase()}. Widths of the existing lane are not recorded; the "before" view uses EDM minimums.`);
+  if (cs.mode==='upgrade') R.push(`Upgrade: the existing ${cs.existing}${cs.when?' ('+cs.when+')':''} is not All Ages and Abilities; painted lanes and sharrows give no physical protection (Engineering Design Manual §8.5.3.4, §8.5.3.5). This option replaces it with ${SEP[opt.sep].name.toLowerCase()}. Widths of the existing lane are not recorded; the "before" view uses EDM minimums.`);
   if (cs.mode==='permanent') R.push(`Make permanent: the existing street-level protected lane${cs.when?' ('+cs.when+')':''} keeps its alignment; the Rapid Implementation Guide treats posts, planters and pre-cast curb as interim materials (Figure 32, Tables 3–9) and this option moves to ${SEP[opt.sep].name.toLowerCase()}. The layer does not record the current material, so check it on site before pricing the change.`);
   if (cs.mode==='review') R.push(`Review: the raised lane${cs.when?' ('+cs.when+')':''} is already the permanent form. Check its width against Table 8-6 (widths are not recorded; the drawing assumes the minimum) and its intersections against §8.9.1.12.`);
-  if (bw && !bw.aaa && cs.mode!=='offstreet') R.push('Not on the AAA network: confirm the lane meets Table 8-6 minimums and that the crossings at both ends are protected, then it can be added to the network.');
+  if (bw && !bw.aaa && cs.mode!=='offstreet') R.push('Not on the All Ages and Abilities (AAA) network: confirm the lane meets Table 8-6 minimums and that the crossings at both ends are protected, then it can be added to the network.');
   if (bw && bw.dir==='OW' && ctx.dirMode==='two') R.push('The existing facility is one-way; the connection rule makes this block two-way, so the design adds the contra-flow direction (a change of facility, not just of material).');
   E.filter(e=>e.k==='buf').forEach(e=>{ const kind=SEP[e.sep].bufKind;
     if (e.w>=RULES.buffer.treed.min && kind!=='barrier') R.push(`Buffer on the ${ctx.lbl[e.side==='L'?0:1]} is ${fmt(e.w)} m — wide enough for a raised buffer with street trees (min 1.5 m, preferred 2.3 m, Table 8-7).`);
@@ -444,7 +444,7 @@ function layout(els){ const total=els.reduce((s,e)=>s+e.w,0); let x=-total/2; el
 // ── v2: direct editing of the cross-section (drag handles and the element popover in plan / section) ──────────────────
 // Every operation keeps the curb-to-curb total: a dragged boundary trades width between its two neighbours; an inserted
 // element takes its width from the travel lanes' spare; a removed element gives its width to the nearest travel lane.
-const LEVELS=[[0,'street level'],[0.08,'intermediate · +80 mm'],[0.15,'sidewalk level · +150 mm']];
+const LEVELS=[[0,'street level'],[0.08,'intermediate (+80 mm)'],[0.15,'sidewalk level (+150 mm)']];
 function elLabel(e,ctx){ const side=e.side==='C'?'centre':ctx.lbl[e.side==='L'?0:1];
   return e.k==='sw'?(e.existing?'Existing deck sidewalk (kept) · ':'Sidewalk + boulevard · ')+side:e.k==='bike'?(e.two?'Two-way bike lane':'Bike lane · '+side):e.k==='buf'?'Buffer · '+side:e.k==='park'?'Parking · '+side:e.turn?'Centre turn lane':'Travel lane · '+side; }
 function elShort(e){ return e.k==='sw'?(e.existing?'existing sw':'sidewalk'):e.k==='bike'?(e.two?'2-way bike':'bike'):e.k==='buf'?(SEP[e.sep]?SEP[e.sep].name.split(' ')[0].toLowerCase():'buffer'):e.k==='park'?'parking':e.turn?'turn':'travel'; }
@@ -510,7 +510,19 @@ function extendLine(g, e0, e1){ if(g.length<2) return g; const out=g.slice(); co
 // pavement markings of a surrounding street from its traffic model, in the local frame:
 //   centre  — yellow centreline (two-way streets)      lane — dashed white lane line (multi-lane, or the one-way centre)
 //   park    — faint edge of a parking lane
+// v3: join marking runs end to end (same kind) so a lane line on a structure is one polyline across the City's pieces — dashes
+// run through the nodes, no double ends. Runs are oriented along their street; a reversed neighbour is flipped to fit.
+function joinRuns(runs, tol){ tol=tol||1.2; const R=runs.filter(r=>r&&r.length>1).map(r=>r.slice()); let merged=true;
+  const d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  while(merged){ merged=false; outer: for(let i=0;i<R.length;i++){ for(let j=0;j<R.length;j++){ if(i===j) continue; const A=R[i], B=R[j]; const a0=A[0], a1=A[A.length-1], b0=B[0], b1=B[B.length-1];
+        if(d(a1,b0)<tol){ R[i]=A.concat(B.slice(1)); R.splice(j,1); merged=true; break outer; }
+        if(d(a1,b1)<tol){ R[i]=A.concat(B.slice().reverse().slice(1)); R.splice(j,1); merged=true; break outer; }
+        if(d(a0,b1)<tol){ R[i]=B.concat(A.slice(1)); R.splice(j,1); merged=true; break outer; }
+        if(d(a0,b0)<tol){ R[i]=B.slice().reverse().concat(A.slice(1)); R.splice(j,1); merged=true; break outer; } } } }
+  return R; }
 function streetMarkings(st){ const m=st.m; const out=[]; const tr=st.trim||[8,8]; const cr=st.cross||[true,true];
+  if(st.mkDup) return out;   // v3: a hosted piece on its host's own line — the host draws these lines
+  if(st.mkE) return st.mkE;  // v3: a structure piece's lines follow its edge polygon (tapers, merges) — set in cityContext
   const bar=st.bar||[0,0];   // v2: at a junction the lines and stop bar end 1 m behind the crossing street's sidewalk, not inside its crosswalk
   const g=trimLine(st.g, cr[0]?Math.max(tr[0]+1.5,bar[0]):0, cr[1]?Math.max(tr[1]+1.5,bar[1]):0); if(g.length<2) return out;   // markings stop 1.5 m short of a junction only; where the street simply carries on they run through
   // stop bars where a two-way street meets a crossing street: traffic arriving at end 1 travels +along and keeps to the
@@ -851,6 +863,15 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
     const a=st.g[0], b=st.g[st.g.length-1]; const ux=b[0]-a[0], uz=b[1]-a[1]; const q=nearOnPoly(mid,tw.g)[1]; const innerR=(ux*(q[1]-mid[1])-uz*(q[0]-mid[0]))<0;   // the twin lies to the right of travel
     const g=st.gx||st.g; const hwP=st.m.ctc/2; const inner=a2=>{ const p=pointAlong(g,a2); const d=nearOnPoly(p,tw.g)[0]; return Math.max(hwP+0.3, Math.min(d/2, 12)); };
     st.E.band[innerR?'R':'L']=offsetLineVar(g, a2=>(innerR?1:-1)*inner(a2)); });
+  // v3: lane lines on a structure follow its edge polygon — each line sits at its lane's fraction of the width between the left
+  // and right edges, so lines converge through a width taper and flare with the merge curve into the deck instead of running
+  // straight off the piece's centreline; stop bars and parking edges do not belong on a deck
+  streets.forEach(st=>{ if(!st.deck||st.host2||!st.E) return; const m=st.m; const Lp=st.E.pav.L, Rp=st.E.pav.R; if(Lp.length<2||Rp.length<2) return; const n=Math.max(Lp.length,Rp.length,2); const A=resampleLine(Lp,n), B=resampleLine(Rp,n);
+    const at=f=>A.map((p,i)=>[p[0]+(B[i][0]-p[0])*f, p[1]+(B[i][1]-p[1])*f]); const fr=e=>clamp((e+m.ctc/2)/m.ctc,0,1); const out=[];
+    if(m.lanes>=2) m.yellow.forEach(e=>out.push({kind:'centre', g:at(fr(e)), w:0.12})); m.white.forEach(e=>out.push({kind:'lane', g:at(fr(e)), w:0.12, dash:[2,3.5]})); st.mkE=out; });
+  // a hosted piece lying on its host's own line (1400 Granville St on the Granville deck) would draw the host's lines a second
+  // time, out of phase — the host draws them; a hosted carriageway offset from its host keeps its own
+  streets.forEach(st=>{ if(!st.host2) return; const smp=alongLine(st.g,5,2.5); if(!smp.length) return; const host=streets.find(o=>o!==st&&o.deck&&!o.host2&&smp.filter(q=>nearOnPoly([q[0],q[1]],o.g)[0]<2.0).length>=smp.length*0.8); if(host) st.mkDup=true; });
   const distTo=(st,p)=>{ let d=Infinity; for(let k=1;k<st.g.length;k++){ const a=st.g[k-1], b=st.g[k]; const dx=b[0]-a[0], dz=b[1]-a[1]; const t=clamp(((p[0]-a[0])*dx+(p[1]-a[1])*dz)/(dx*dx+dz*dz||1),0,1); d=Math.min(d, Math.hypot(p[0]-(a[0]+t*dx), p[1]-(a[1]+t*dz))); } return d; };
   // existing bikeways: oriented S→N / W→E, with the street they run on (for curb-to-curb and which direction has the lane)
   const bike=BW.filter(b=>b.g.some(near)).map(b=>{ const g=smoothLine(fwdOrient(b.g).map(p=>F.toLocal(p[0],p[1])),2); const mid=g[Math.floor(g.length/2)];
@@ -919,10 +940,28 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
     const ranges=[[a0,a1]];
     if(st===blockHost){ const aS=alongOf(st.g,[0,0])[1], aE=alongOf(st.g,[0,s.len])[1]; const lo=Math.min(aS,aE), hi=Math.max(aS,aE); ranges.length=0; if(lo-a0>4) ranges.push([a0,lo]); if(a1-hi>4) ranges.push([hi,a1]); }
     ranges.forEach(([r0,r1])=>{ const g=trimLine(st.g, Math.max(r0, st.trim[0]+1), Math.max(L-r1, st.trim[1]+1)); if(g.length>1) bikeHosted.push({st, g, b, ctc:st.m.ctc, blockHost:st===blockHost}); }); });
+  // v3: existing lanes on structures as continuous chains. The City's bikeway pieces are hosted piece by piece, so on a bridge a
+  // lane was drawn per deck piece, each from its own centreline and width: ends that did not meet, offsets that jumped where a
+  // piece's width changed. Here the hosted pieces of one lane (same type, side and width) whose ends meet are chained into one
+  // polyline along the joined host centrelines; the lane's offset at each point comes from the host piece's EDGE polygon (so it
+  // follows width tapers and merge curves) and is smoothed over 40 m, so where the deck steps in width the lane shifts gradually
+  const bikeChains=[]; { const items=[]; bikeHosted.forEach(h=>{ if(!h.st.deck||h.blockHost) return; bikewayLanes(h.b,h.ctc,'L').forEach(l=>{ if(l.kind==='shared') return; items.push({h,l}); h.chained=true; }); });
+    const key=it=>it.l.kind+'|'+(it.l.off<0?'L':'R')+'|'+it.l.w.toFixed(1)+'|'+(it.l.two?2:1); const groups={}; items.forEach(it=>{ (groups[key(it)]=groups[key(it)]||[]).push(it); });
+    const dd=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+    Object.values(groups).forEach(its=>{ const used=new Set(); its.forEach((it,i)=>{ if(used.has(i)) return; used.add(i); const chain=[it]; let grow=true;
+        while(grow){ grow=false; const a=chain[0].h.g[0], b=chain[chain.length-1].h.g[chain[chain.length-1].h.g.length-1];
+          for(let j=0;j<its.length;j++){ if(used.has(j)) continue; const o=its[j], oa=o.h.g[0], ob=o.h.g[o.h.g.length-1]; if(dd(ob,a)<3){ chain.unshift(o); used.add(j); grow=true; break; } if(dd(oa,b)<3){ chain.push(o); used.add(j); grow=true; break; } } }
+        const G=[]; chain.forEach(c=>c.h.g.forEach(p=>{ if(!G.length||dd(p,G[G.length-1])>0.3) G.push(p); })); if(G.length<2) return;
+        const l=chain[0].l, sgn=l.off<0?-1:1, bf=l.kind==='prot'?0.6:0.15; const hosts=[...new Set(chain.map(c=>c.h.st))];
+        const offAt=p=>{ let best=null; hosts.forEach(st=>{ const d=nearOnPoly(p,st.g)[0]; if(!best||d<best.d) best={d,st}; }); const st=best.st; let half=st.m.ctc/2; if(st.E&&!st.host2){ const e=st.E.pav[sgn<0?'L':'R']; const de=nearOnPoly(p,e)[0]; if(de>2&&de<half*2) half=de; } return sgn*(half-bf-l.w/2); };
+        const smp=[G[0],...alongLine(G,4,2).map(q=>[q[0],q[1]]),G[G.length-1]]; const offs=smp.map(offAt); const sm=offs.map((_,i)=>{ let s2=0,n=0; for(let j=i-5;j<=i+5;j++){ if(j>=0&&j<offs.length){ s2+=offs[j]; n++; } } return s2/n; });
+        const al=[0]; for(let i=1;i<smp.length;i++) al.push(al[i-1]+dd(smp[i],smp[i-1])); const offFn=a=>{ let i=1; while(i<al.length-1&&al[i]<a) i++; const t=clamp((a-al[i-1])/((al[i]-al[i-1])||1),0,1); return sm[i-1]+(sm[i]-sm[i-1])*t; };
+        const cg=offsetLineVar(smp,offFn); const buf=l.kind==='prot'?offsetLineVar(smp,a=>offFn(a)+sgn*(l.w/2+0.3)):null;
+        bikeChains.push({g:cg, buf, w:l.w, kind:l.kind, two:!!l.two, dir:l.dir, hosts, h:(x,z)=>{ let hh=0; hosts.forEach(st=>{ if(nearOnPoly([x,z],st.g)[0]<st.m.ctc/2+3) hh=Math.max(hh,deckAtSt(st,x,z)); }); return hh; }}); }); }); }
   // v3: the other blocks of the proposal this block belongs to, with their proposed lanes and buffers (drawn as context so the
   // whole proposal is seen, not one block)
   const propLanes=(typeof proposalContextLanes==='function')?proposalContextLanes(s,F,near):[];
-  const v={streets,bike,bikeHosted,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.v=v; return v; }
+  const v={streets,bike,bikeHosted,bikeChains,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.v=v; return v; }
 function pointInRing(x,z,r){ let inside=false; for(let i=0,j=r.length-1;i<r.length;j=i++){ const [xi,zi]=r[i], [xj,zj]=r[j]; if(((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/((zj-zi)||1e-9)+xi)) inside=!inside; } return inside; }
 
 // ── v2: review export — every block end the tool reads as something special, for checking against Google Maps ──────────

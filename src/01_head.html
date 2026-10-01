@@ -256,7 +256,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 <div id="app">
 <header>
   <div class="logo">B</div>
-  <div><h1>Vancouver Bikeway Designer</h1><div class="sub">Existing network from CoV Open Data · design rules from the Engineering Design Manual 2026 &amp; Rapid Implementation Guide</div></div>
+  <div><h1>Vancouver Bikeway Designer</h1><div class="sub">Existing bikeways from City of Vancouver Open Data · design rules from the City's Engineering Design Manual (2026) and Rapid Implementation Guide</div></div>
   <div class="grow"></div>
   <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Search a block, e.g. 1000 Hornby St" autocomplete="off"><div class="ac" id="ac"></div></div>
   <button class="ghost" id="btn-back" style="display:none">← Map</button>
@@ -264,20 +264,20 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 
 <div id="screen-map" class="active">
   <canvas id="map"></canvas>
-  <div class="hint" id="maphint">Click street blocks to build a proposal · + adds, − removes · click a bikeway for its details</div>
+  <div class="hint" id="maphint">Click blocks to build a proposal (+ adds, − removes) · click an existing bikeway for details</div>
   <div class="panel" id="proj"></div>
   <div class="toast" id="toast"></div>
   <input type="file" id="proj-file" accept=".json,application/json" style="display:none">
   <div class="legend">
     <div id="leg-exist">
     <div class="label">Existing bikeways</div>
-    <div class="item"><span class="sw" style="border-top:4px solid #15803D"></span>Protected bike lane · AAA</div>
+    <div class="item"><span class="sw" style="border-top:4px solid #15803D"></span>Protected bike lane · All Ages and Abilities (AAA)</div>
     <div class="item"><span class="sw" style="border-top:4px solid #22C55E"></span>Protected bike lane</div>
     <div class="item"><span class="sw" style="border-top:3px dashed #16A34A"></span>Painted lane</div>
     <div class="item"><span class="sw" style="border-top:3px solid #86EFAC"></span>Local street bikeway</div>
     <div class="item"><span class="sw" style="border-top:3px dotted #4D7C0F"></span>Shared lane</div>
-    <div class="item" style="margin-top:8px"><span class="sw" style="border-top:2px solid #C4C9D1"></span>Street (no facility)</div>
-    <div class="item"><span class="sw" style="border-top:4px solid #F59E0B"></span>Selected block · route start</div>
+    <div class="item" style="margin-top:8px"><span class="sw" style="border-top:2px solid #C4C9D1"></span>Street without a bikeway</div>
+    <div class="item"><span class="sw" style="border-top:4px solid #F59E0B"></span>Selected block / route start</div>
     </div>
     <div id="leg-dyn"></div>
     <div id="leg-layers"></div>
@@ -293,8 +293,8 @@ header .sub{font-size:11.5px;color:var(--ink2)}
     <div class="kv" id="c-kv"></div>
     <div id="c-ctx" class="small"></div>
     <div id="c-blocks" style="display:none"></div>
-    <button id="c-design1" style="width:100%;margin-top:10px;display:none">Design this block only →</button>
-    <button class="primary" id="c-design" style="width:100%;margin-top:6px">Design bike lane on this block →</button>
+    <button id="c-design1" style="width:100%;margin-top:10px;display:none">Design only this block →</button>
+    <button class="primary" id="c-design" style="width:100%;margin-top:6px">Design a bike lane here →</button>
     <button id="c-prop" style="width:100%;margin-top:6px">+ Add to proposal</button>
   </div>
 </div>
@@ -306,18 +306,18 @@ header .sub{font-size:11.5px;color:var(--ink2)}
     <div class="grow"></div>
     <button class="small" id="btn-verify" title="Check lanes, parking and the existing facility against a street photo">📷 Verify street</button>
     <div class="tabs" id="tabs"><button data-v="3d" class="active">3D</button><button data-v="plan">Plan</button><button data-v="sec">Section</button></div>
-    <span class="toggle on" id="tg-before"><i></i>Show before</span>
+    <span class="toggle on" id="tg-before" title="Show the existing street beside the proposal"><i></i>Show existing</span>
     <span class="toggle" id="tg-anim"><i></i>Animate</span>
     <span class="toggle on" id="tg-ctx"><i></i>City context</span>
     <span class="toggle on" id="tg-edit" title="Show the width handles and element selection in Plan and Section"><i></i>Edit in view</span>
-    <span class="toggle on" id="tg-ann" title="Street names, existing-traffic labels, dimensions and element names in 3D, plan and section (north arrow and scale bar always stay)"><i></i>Annotations</span>
+    <span class="toggle on" id="tg-ann" title="Street names, traffic labels, dimensions and element names in 3D, plan and section (north arrow and scale bar always stay)"><i></i>Labels &amp; dimensions</span>
   </div>
   <div class="body">
     <div class="side" id="side">
       <div class="sidetab" id="side-tab" title="Collapse / expand the street panel">◀</div>
       <div class="sidein">
         <div class="svwin" id="svwin"><div class="svhead" id="svhead"><span class="svt" id="sv-title">Street view</span><button class="ghost" id="sv-flip" title="Turn round: look the other way along the block">↻</button><a id="sv-open" href="#" target="_blank" rel="noopener" title="Open in Google Maps">↗</a><button class="ghost" id="sv-min" title="Collapse / expand the panorama">▾</button></div><div class="svbody" id="sv-body"></div><div class="svfoot" id="sv-foot"></div></div>
-        <div class="sec" id="xsec"><h4>Existing configuration <span class="tag info">inferred · editable</span></h4>
+        <div class="sec" id="xsec"><h4>Existing street <span class="tag info">inferred · editable</span></h4>
           <div class="photo" id="photo"></div>
           <div class="form">
             <div><label>Curb-to-curb (m)</label><input type="number" id="x-ctc" step="0.1"></div>
@@ -325,12 +325,12 @@ header .sub{font-size:11.5px;color:var(--ink2)}
             <div><label>Parking <span id="x-lL"></span></label><select id="x-pL"><option value="1">Yes</option><option value="0">No</option></select></div>
             <div><label>Parking <span id="x-lR"></span></label><select id="x-pR"><option value="1">Yes</option><option value="0">No</option></select></div>
             <div style="grid-column:1/-1"><label>Existing bike facility <span class="muted" id="x-facrec"></span></label><select id="x-fac" title="What is on the street today; the design case (new / upgrade / make permanent) and the before view follow"><option value="auto">as recorded</option><option value="none">none</option><option value="shared">sharrows (shared lane markings)</option><option value="local">local-street bikeway (traffic-calmed, shared)</option><option value="NB">painted lane, no buffer</option><option value="PBT">painted lane, buffer on the traffic side</option><option value="PBP">painted lane, buffer on the parking side</option><option value="PBPT">painted lane, buffers both sides</option><option value="SL">protected lane, street level (curb / posts / planters)</option><option value="R">raised protected lane</option></select></div>
-            <div><label>Lane direction</label><select id="x-dir"><option value="2W">one lane each side</option><option value="Bidirectional">two-way lane, one side</option><option value="OW">one-way lane, one side</option></select></div>
-            <div><label>Which side (one-side lanes)</label><select id="x-side"><option value="auto">as mapped (OSM)</option><option value="L">W / N side</option><option value="R">E / S side</option></select></div>
+            <div><label>Bike lane direction</label><select id="x-dir"><option value="2W">one lane each side</option><option value="Bidirectional">two-way lane, one side</option><option value="OW">one-way lane, one side</option></select></div>
+            <div><label>Side (one-side lanes)</label><select id="x-side"><option value="auto">as mapped (OSM)</option><option value="L">W / N side</option><option value="R">E / S side</option></select></div>
             <div><label>Bus / truck route</label><select id="x-bus"><option value="0">No</option><option value="1">Yes</option></select></div>
-            <div><label>AADT (veh/day)</label><input type="number" id="x-aadt" placeholder="unknown"></div>
+            <div><label>Traffic volume (AADT, vehicles/day)</label><input type="number" id="x-aadt" placeholder="unknown"></div>
           </div>
-          <div class="small muted" style="margin-top:6px"><b>Bus / truck route:</b> buses and trucks need wider lanes — curb lanes 3.2 m minimum instead of 3.0 m, a single lane 3.5 m (EDM Table 8-10); inferred from the City's bus and truck route layers. Switch it off if no route runs on this block.</div>
+          <div class="small muted" style="margin-top:6px"><b>Bus / truck route:</b> buses and trucks need wider lanes — curb lanes 3.2 m minimum instead of 3.0 m, a single lane 3.5 m (Engineering Design Manual Table 8-10). Inferred from the City's bus and truck route layers; switch it off if no route runs on this block.</div>
           <div class="small muted" id="sw-note" style="margin-top:6px">Sidewalk + boulevard fixed at 3.6 m each side — property lines cannot change.</div>
           <div class="bw-edit" id="bw-edit"></div>
         </div>
@@ -353,12 +353,12 @@ header .sub{font-size:11.5px;color:var(--ink2)}
         <button class="ghost small" id="btn-revert">Revert</button><button class="small" id="btn-save">Save as new option</button><button class="small primary" id="btn-prop" title="Keep this block's design in the active proposal on the map">Save to proposal</button><span class="small" id="prop-note"></span>
         <span class="status" id="status"></span>
         <div class="grow"></div><span class="small muted" id="dir-note"></span>
-        <div class="tabs btabs"><button id="bt-design" class="active" title="Existing configuration summary, section editor, compliance, recommendations">Design</button><button id="bt-score" title="Bike score and statistics of the proposal this block belongs to">Bike score</button></div>
+        <div class="tabs btabs"><button id="bt-design" class="active" title="Existing configuration summary, section editor, compliance, recommendations">Design</button><button id="bt-score" title="Bike score and statistics of the proposal this block belongs to">Bike score &amp; statistics</button></div>
       </div>
       <div class="bscore stats" id="bscore" style="display:none"></div>
       <div class="bcols" id="bcols">
         <div class="sec"><h4>Option summary</h4><div class="prosCons" id="summary"></div>
-          <div class="small muted" style="margin-top:10px">The existing street (lanes, parking, facility, widths) is edited in the <b>street panel</b> on the left — ◀ collapses it, ▶ or 📷 brings it back.</div>
+          <div class="small muted" style="margin-top:10px">Edit the existing street (lanes, parking, bikeway, widths) in the <b>street panel</b> on the left — ◀ collapses it, ▶ or 📷 brings it back.</div>
         </div>
         <div class="sec editor"><h4>Design the section <span class="small muted mono" id="ed-total"></span></h4>
           <div class="steps">
@@ -389,17 +389,17 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 <div class="modal" id="method"><div class="box"><button class="ghost x" data-act="close">✕</button><h2>Bike score — methodology and references</h2>
   <p>The tool's bike score follows <b>Bike Score®</b>, the bikeability measure developed by Walk Score with Meghan Winters (SFU), Michael Brauer and Kay Teschke (UBC) — the tool listed on UBC's <i>Cycling in Cities</i> page — and validated against cycling behaviour in 24 Canadian and US cities (Winters et al. 2016). Bike Score rates a place 0–100 from four equally weighted parts: <b>bike lanes</b>, <b>hills</b>, <b>destinations and road connectivity</b>, and <b>bike-commute mode share</b>. The tool reproduces the first three on a 100 m grid over Vancouver and leaves out mode share, which is a census outcome a design cannot change, so each remaining part weighs one third.</p>
   <h3>1 · Bike lanes (one third)</h3><p>Bike Score sums nearby bikeway length with a distance decay (nothing beyond 1,000 m), counting paths at twice a painted lane and three times a shared route, and excludes sharrows. Here every bikeway in the City's layer (plus OpenStreetMap cycleways) is sampled every 25 m, weighted 3 for off-street paths and protected lanes, 1.5 for painted lanes, 1 for local-street bikeways and 0 for sharrows, and summed for each cell with a linear decay to zero at 1,000 m. Bike Score normalises "against an average of the highest scores"; the tool takes the mean of the top 2 % of cells as 100 and applies a square root, so the first lanes near a place count more than the tenth. <b>A proposal adds its blocks to this part as protected lanes (weight 3, less anything already there), and the change is what its statistics report.</b></p>
-  <h3>2 · Hills (one third)</h3><p>Bike Score uses the steepest grade within 200 m, scoring 2 % as 100 and 10 % as 0. The tool computes grades from the City's 1 m contour lines on a 20 m grid (smoothed over 100 m, the grade a cyclist feels rather than a 20 m bump), takes the steepest within 200 m of each cell, and maps 2–10 % to 100–0. The proposal's own grades (average, steepest 20 m, metres over 5 %) are reported separately against the AAA guidance of the BC Active Transportation Design Guide (keep under 3 %; 3–5 % acceptable for short lengths; over 5 % needs extra width).</p>
+  <h3>2 · Hills (one third)</h3><p>Bike Score uses the steepest grade within 200 m, scoring 2 % as 100 and 10 % as 0. The tool computes grades from the City's 1 m contour lines on a 20 m grid (smoothed over 100 m, the grade a cyclist feels rather than a 20 m bump), takes the steepest within 200 m of each cell, and maps 2–10 % to 100–0. The proposal's own grades (average, steepest 20 m, metres over 5 %) are reported separately against the All Ages and Abilities (AAA) guidance of the BC Active Transportation Design Guide (keep under 3 %; 3–5 % acceptable for short lengths; over 5 % needs extra width).</p>
   <h3>3 · Destinations and connectivity (one third)</h3><p>Bike Score uses "a modified Walk Score": the network distance to a diverse set of amenities and the road connectivity (intersection density, block length). The tool uses Walk Score's published category weights — grocery 3; restaurants and bars 10 slots (.75, .45, .25, .25, .225 × 4, .2 × 2); shopping 5 slots (.5, .45, .4, .35, .3); coffee 1.25 and .75; banks, parks, schools, libraries/bookshops and entertainment 1 each (15 points in all) — counting the nearest amenities first with Walk Score's own distance thresholds (full credit to 400 m, none beyond 1,600 m): the modification Bike Score applies is not published, and bicycle-scale distances saturate in a city this dense, so every cell would score the same. A Walk Score connectivity penalty of up to 5 % applies where there are fewer than 60 intersections per km² within 800 m, and up to 5 % where blocks average over 150 m. Amenities come from OpenStreetMap (8,281 places in the city); distances are straight-line, not network.</p>
   <h3>Score bands</h3><table><tr><th>Score</th><th>Bike Score band</th></tr><tr><td>90–100</td><td>Biker's Paradise — daily errands can be done by bike</td></tr><tr><td>70–89</td><td>Very Bikeable — cycling is convenient for most trips</td></tr><tr><td>50–69</td><td>Bikeable — some bike infrastructure</td></tr><tr><td>0–49</td><td>Somewhat Bikeable — minimal bike infrastructure</td></tr></table>
-  <h3>What the tool reports for a proposal</h3><ul><li><b>Bike score around the proposal</b>: the mean over the grid cells within 400 m of its blocks, before (existing network) and after (with every proposal in the project), with the three parts.</li><li><b>Citywide</b>: the mean over all scored cells before and after, and how many cells gain a point or more.</li><li><b>Connectivity</b>: how many ends of the proposal meet the AAA network, another facility, another block of the proposal, or nothing (a loose end).</li><li><b>Destinations</b>: places within 400 m (a two-minute ride) by category.</li><li><b>Grades</b> along the proposal, from the contour grid.</li></ul>
+  <h3>What the tool reports for a proposal</h3><ul><li><b>Bike score around the proposal</b>: the mean over the grid cells within 400 m of its blocks, before (existing network) and after (with every proposal in the project), with the three parts.</li><li><b>Citywide</b>: the mean over all scored cells before and after, and how many cells gain a point or more.</li><li><b>Connectivity</b>: how many ends of the proposal meet the All Ages and Abilities (AAA) network, another facility, another block of the proposal, or nothing (a loose end).</li><li><b>Destinations</b>: places within 400 m (a two-minute ride) by category.</li><li><b>Grades</b> along the proposal, from the contour grid.</li></ul>
   <h3>Departures from Bike Score, stated plainly</h3><ul><li>Mode share is left out (three parts, not four).</li><li>Distances to amenities are straight-line; Bike Score / Walk Score use network distance.</li><li>Walk Score's walking thresholds are used unmodified for amenities, and the square-root lane scaling is the tool's choice; both are documented in <code>scripts/score.py</code> and can be changed there.</li><li>Cells with no street within 150 m (water, port, park interiors) carry no score.</li></ul>
   <h3>References</h3><ul>
   <li>Walk Score. <i>Bike Score Methodology</i>. <a href="https://www.walkscore.com/bike-score-methodology.shtml" target="_blank" rel="noopener">walkscore.com/bike-score-methodology.shtml</a>; <i>Walk Score Methodology</i>. <a href="https://www.walkscore.com/methodology.shtml" target="_blank" rel="noopener">walkscore.com/methodology.shtml</a></li>
   <li>Winters M, Teschke K, Brauer M, Fuller D (2016). Bike Score®: Associations between urban bikeability and cycling behavior in 24 cities. <i>International Journal of Behavioral Nutrition and Physical Activity</i> 13:18. <a href="https://doi.org/10.1186/s12966-016-0339-0" target="_blank" rel="noopener">doi:10.1186/s12966-016-0339-0</a></li>
   <li>Winters M, Brauer M, Setton EM, Teschke K (2013). Mapping bikeability: a spatial tool to support sustainable travel. <i>Environment and Planning B</i> 40(5):865–883 — the UBC bikeability index that preceded Bike Score.</li>
   <li>UBC Cycling in Cities. <i>Tools &amp; Training</i>. <a href="https://cyclingincities.spph.ubc.ca/motivating-cycling/tools-training/" target="_blank" rel="noopener">cyclingincities.spph.ubc.ca</a></li>
-  <li>British Columbia Ministry of Transportation (2019). <i>BC Active Transportation Design Guide</i>, chapter on grades for AAA routes. City of Vancouver, <i>Engineering Design Manual</i> 2026, §8.5.</li>
+  <li>British Columbia Ministry of Transportation (2019). <i>BC Active Transportation Design Guide</i>, chapter on grades for All Ages and Abilities routes. City of Vancouver, <i>Engineering Design Manual</i> 2026, §8.5.</li>
   <li>Data: City of Vancouver Open Data (bikeways, streets, 1 m contours); OpenStreetMap contributors, ODbL (amenities, cycleways, bike parking).</li></ul>
 </div></div>
 <script>

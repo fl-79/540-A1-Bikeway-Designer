@@ -65,7 +65,7 @@ function propStats(p){ const blocks=propBlocks(p).filter(Boolean); const ids=blo
 // ── the statistics panel ──
 // the statistics as HTML, for the map's panel and for the Score tab of the design screen
 function statsHTML(p){ const S=propStats(p); const km=(S.len/1000).toFixed(2); const pc=v=>Math.round(v); const sgn=v=>(v>=0?'+':'')+Math.round(v);
-  const caseN={new:'new lane',upgrade:'upgrade to protected',permanent:'made permanent',review:'review of existing'};
+  const caseN={new:'new lane',upgrade:'upgrade to protected lane',permanent:'made permanent',review:'review of existing lane'};
   const sepN=Object.entries(S.seps).map(([k,n])=>n+' × '+(SEP[k]?SEP[k].name.split(' (')[0].toLowerCase():k)).join(', ');
   const sc=S.score; const band=sc&&sc.after?bandOf(sc.after.total):null;
   const explain=sc&&sc.after?[`<b>Bike lanes</b> ${pc(sc.before.lane)} → ${pc(sc.after.lane)} (${sgn(sc.after.lane-sc.before.lane)}): the ${km} km of protected lane counts at weight 3 within 1 km of each cell (linear decay), like an off-street path; the existing network around it contributed the rest. Square-root scaled, so the first lanes near a place count most.`,
@@ -77,14 +77,14 @@ function statsHTML(p){ const S=propStats(p); const km=(S.len/1000).toFixed(2); c
     <div class="small muted">Mean of the ${sc.cells} grid cells within 400 m of the proposal. Citywide mean ${sc.city.before.toFixed(1)} → ${sc.city.after.toFixed(1)}; ${sc.city.up} of ${sc.city.cells} cells gain a point or more. Turn on the <b>Bike score heat map</b> layer to see it.</div>
     <div class="label" style="margin-top:10px">How the score was calculated</div>${explain.map(t=>`<div class="msg" style="background:#F8FAFC;color:var(--ink2)">${t}</div>`).join('')}<div class="small"><a href="#" data-act="method">Full methodology and references →</a></div>`:'<div class="msg warn">No score grid in the data (run scripts/score.py).</div>'}
     <div class="label" style="margin-top:10px">Connectivity</div>
-    <div class="kv"><div><b>Joins the AAA network</b><span>${S.conn.aaa} end${S.conn.aaa===1?'':'s'}</span></div><div><b>Joins other facilities</b><span>${S.conn.exist}</span></div><div><b>Inside the proposal</b><span>${S.conn.internal} ends</span></div><div><b>Loose ends</b><span>${S.conn.loose}</span></div></div>
+    <div class="kv"><div><b>Joins the All Ages and Abilities network</b><span>${S.conn.aaa} end${S.conn.aaa===1?'':'s'}</span></div><div><b>Joins other facilities</b><span>${S.conn.exist}</span></div><div><b>Inside the proposal</b><span>${S.conn.internal} ends</span></div><div><b>Loose ends</b><span>${S.conn.loose}</span></div></div>
     ${S.conn.links.length?`<div class="small muted">${S.conn.links.slice(0,6).map(l=>(l.t==='aaa'?'AAA: ':'')+esc(l.n)).join(' · ')}${S.conn.links.length>6?' · …':''}</div>`:''}
     ${S.conn.loose?`<div class="msg warn" style="margin-top:4px">⚠<span>${S.conn.loose} end${S.conn.loose===1?'':'s'} of the proposal meet${S.conn.loose===1?'s':''} no bikeway: extend the proposal (Route fill) to reach the network or a destination.</span></div>`:'<div class="msg ok">✓<span>Every end of the proposal meets a bikeway or another block of the proposal.</span></div>'}
     <div class="label" style="margin-top:10px">Grades</div>
     <div class="kv"><div><b>Average</b><span>${(S.grade.mean*100).toFixed(1)} %</span></div><div><b>Steepest 20 m</b><span>${(S.grade.max*100).toFixed(1)} %</span></div><div><b>Over 5 % (steep)</b><span>${Math.round(S.grade.steep)} m</span></div><div><b>3–5 % (moderate)</b><span>${Math.round(S.grade.mod)} m</span></div></div>
-    <div class="small muted">AAA guidance: keep grades under 3 % where possible; 3–5 % is acceptable for short lengths; over 5 % needs extra width for the slow uphill rider and the fast downhill one (BC AAA Design Guide §3; EDM §8.5).</div>
-    <div class="label" style="margin-top:10px">Design</div><div class="small muted">${sepN||'—'}. ${Object.values(p.blocks).filter(b=>b.auto).length} block(s) still carry the solver's option A — open a block to design it.</div>
-    <div class="label" style="margin-top:10px">Street photos to verify the existing state</div><div class="stats-photos small muted">…</div>`; }
+    <div class="small muted">All Ages and Abilities guidance: keep grades under 3 % where possible; 3–5 % is acceptable for short lengths; over 5 % needs extra width for the slow uphill rider and the fast downhill one (BC Active Transportation Design Guide §3; Engineering Design Manual §8.5).</div>
+    <div class="label" style="margin-top:10px">Design</div><div class="small muted">${sepN||'—'}. ${Object.values(p.blocks).filter(b=>b.auto).length} block(s) still use the default option (A) — open a block to design it.</div>
+    <div class="label" style="margin-top:10px">Street photos (check the existing street)</div><div class="stats-photos small muted">…</div>`; }
 function bindStats(box,p){ const m=box.querySelector('[data-act=method]'); if(m) m.onclick=e=>{ e.preventDefault(); $('method').classList.add('show'); }; const ph=box.querySelector('.stats-photos'); if(ph&&typeof renderPhotoStrip==='function') renderPhotoStrip(p, ph); }
 function showStats(id){ const p=PROJ.proposals.find(x=>x.id===id)||activeProp(); const box=$('stats'); if(!p){ box.classList.remove('show'); return; } $('card').classList.remove('show');
   box.innerHTML=`<div class="row"><h3>${esc(p.name)}</h3><div class="grow"></div><button class="ghost small" data-act="close">✕</button></div>`+statsHTML(p);

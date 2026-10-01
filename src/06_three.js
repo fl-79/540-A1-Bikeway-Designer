@@ -136,6 +136,8 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   // that level, so overlapping surfaces are exactly coplanar and read as one slab — no micro-offsets, no steps, no twist.
   const upList=C.streets.filter(st=>st.deck&&!st.host2); upList.forEach(st=>{ st._yo=0; });
   const HF=(st,x,z)=>{ let h=deckAt(st,x,z); upList.forEach(o=>{ if(o===st||!o.E||!o.E.ring) return; if(!pointInRing(x,z,o.E.ring)) return; const ho=deckAt(o,x,z); if(Math.abs(ho-h)<0.5&&ho>h) h=ho; }); return h; };   // within half a metre only: a ramp already falling away beside its deck keeps its own grade (a wider tolerance twisted its inner edge up to the deck)
+  const deckMk=[];   // v3: marking runs of every structure piece, joined and drawn after the loop
+  const HFany=(x,z)=>{ let h=0; upList.forEach(o=>{ const inside=o.E&&o.E.ring?pointInRing(x,z,o.E.ring):nearOnPoly([x,z],o.g)[0]<o.m.ctc/2+1; if(inside) h=Math.max(h,deckAt(o,x,z)); }); return h; };
   const MP={path:MAT(0xE9E5DC), des:MAT(0xDCE5D6), island:MAT(0xCAD4B8), plaza:MAT(0xECE8E0), pier:MAT(0xB9BBBD)};
   const inR=pts=>pts.some(([x,z])=>inBox(x,z));
   const Q={white:new Quads(mqc('white')), yellow:new Quads(mqc('yellow')), bike:new Quads(mqc('bike')), paint:new Quads(mqc('paint')), shared:new Quads(mqc('shared'))}; const yRoad=(x,z)=>ez(x,z)+Y.mark;
@@ -146,7 +148,11 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   C.streets.forEach(st=>{ if(!inR(st.g)) return; const m=st.m; const band=trimLine(st.g,st.trim[0],st.trim[1]), pav=extendLine(st.g,st.trim[0],st.trim[1]);
     // v2: bridges and viaducts stand on their deck (ramping down to grade where they land), cast shadows and sit on piers
     const hf=st.deck?((x,z)=>HF(st,x,z)):null, yM=hf?((x,z)=>ez(x,z)+Y.mark+hf(x,z)):yRoad; st._yM=yM;
-    if(st.host2){ streetMarkings(st).forEach(mk=>{ mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); }); return; }   // v3: a hosted piece rides its deck — markings only, no slab of its own
+    // v3: a structure's markings are collected (dropped inside any other piece at the same height) and drawn joined after the loop
+    if(hf){ const emit=(gg,mk)=>mkRuns(st,gg).forEach(p=>deckMk.push({g:p,mk})); const inOtherMk=p=>upList.some(o=>o!==st&&o.E&&o.E.ring&&pointInRing(p[0],p[1],o.E.ring)&&Math.abs(deckAt(o,p[0],p[1])-deckAt(st,p[0],p[1]))<0.6&&o.m.ctc>=st.m.ctc-0.01);
+      const dropMk=gg=>{ const pts=[gg[0],...alongLine(gg,1.5,0.75).map(q=>[q[0],q[1]]),gg[gg.length-1]]; const runs=[]; let run=[]; pts.forEach(p=>{ if(inOtherMk(p)){ if(run.length>1) runs.push(run); run=[]; } else run.push(p); }); if(run.length>1) runs.push(run); return runs; };
+      st._emitMk=mk=>dropMk(mk.g).forEach(r=>emit(r,mk)); }
+    if(st.host2){ streetMarkings(st).forEach(mk=>st._emitMk(mk)); return; }   // v3: a hosted piece rides its deck — markings only, no slab of its own
     if(hf&&st.E){   // v3: every structure piece is one surface from its edges (width tapers, merge tapers); parapets along them, none inside its deck and none at grade
       // v3: no parapet or pier inside ANY other structure piece at the same height — a deck's edge line stops where a ramp joins it
       // at deck level (the merge), a ramp's inside its deck; a piece passing at another level keeps its parapet
@@ -160,8 +166,8 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
         // the parapet strip between the pavement edge and the band edge, only outside the deck
         const mid=A.map((p,i)=>[(p[0]+B[i][0])/2,(p[1]+B[i][1])/2]); dropIn(mid).forEach(run=>{ const w=Math.max(0.5,Math.hypot(B[0][0]-A[0][0],B[0][1]-A[0][1])); strip(run,w,M.ctxSw,Y.walk,0.6,hf); }); });
       alongLine(st.g,24,12).forEach(([x,z])=>{ const h=hf(x,z); if(h<2.5||!inBox(x,z)||inDeck([x,z])) return; cyl(0.55,Math.max(0.5,h-0.8),MP.pier,x,ez(x,z),z,g,12); });
-      streetMarkings(st).forEach(mk=>{ mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
-      st.E.pav.merges.forEach(m=>{ const o=m.deck; const yD=(x,z)=>ez(x,z)+Y.mark+HF(o,x,z)+0.002; clipPoly(m.line,BOX).forEach(p=>Q.white.line(p,0.12,yD,[2,3.5])); });   // the gore lane line, on the deck
+      streetMarkings(st).forEach(mk=>{ if(hf){ st._emitMk(mk); return; } mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
+      st.E.pav.merges.forEach(m=>clipPoly(m.line,BOX).forEach(p=>deckMk.push({g:p,mk:{kind:'lane',w:0.12,dash:[2,3.5]}})));   // the gore lane line, on the deck
       return; }
     // sidewalk zones as two strips (curb line → property line) so the pavement stays visible between them, plus the curb lines
     // per side: at a T-junction the sidewalk and curb on the side with no crossing street run straight through
@@ -169,14 +175,22 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
       strip(offsetLine(bs,sg*(m.ctc/2+swW/2)),swW,M.ctxSw,Y.walk,hf?0.6:0.45,hf); strip(offsetLine(bs,sg*m.ctc/2),0.25,M.ctxCurb,Y.walk,hf?0.6:0.45,hf); }); }
     strip(pav,Math.max(3,m.ctc),M.ctxRd,Y.road,hf?0.8:0.3,hf);
     if(hf) alongLine(st.g,24,12).forEach(([x,z])=>{ const h=hf(x,z); if(h<2.5||!inBox(x,z)) return; cyl(0.55,Math.max(0.5,h-0.8),MP.pier,x,ez(x,z),z,g,12); });   // piers under the deck, every 24 m
-    streetMarkings(st).forEach(mk=>{ mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
+    streetMarkings(st).forEach(mk=>{ if(hf){ st._emitMk(mk); return; } mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
     // bus stops on the street (TransLink GTFS): pole + sign on the correct side
     if(m.stops){ const len=[0]; for(let i=1;i<st.g.length;i++) len.push(len[i-1]+Math.hypot(st.g[i][0]-st.g[i-1][0],st.g[i][1]-st.g[i-1][1]));
       ['L','R'].forEach(sd=>(m.stops[sd]||[]).forEach(([d])=>{ let i=1; while(i<len.length-1&&len[i]<d) i++; const a=st.g[i-1], b=st.g[i]; const f=clamp((d-len[i-1])/((len[i]-len[i-1])||1),0,1); const px=a[0]+(b[0]-a[0])*f, pz=a[1]+(b[1]-a[1])*f; const ux=(b[0]-a[0]), uz=(b[1]-a[1]), L=Math.hypot(ux,uz)||1; const off=(sd==='L'?-1:1)*(m.ctc/2+1.2); const x=px+uz/L*off, z=pz-ux/L*off; const y=ez(x,z)+Y.walk; if(!inBox(x,z)) return;
         cyl(0.04,2.6,M.ctxPost,x,y,z,g,8); box(0.4,0.3,0.06,M.ctxPost,x-0.2,y+2.3,z-0.03,g); })); } });
+  // v3: structure markings drawn joined end to end (joinRuns): one polyline per lane line along a deck, dashes through the nodes
+  { const groups={}; deckMk.forEach(({g,mk})=>{ const key=mk.kind+'|'+mk.w+'|'+(mk.dash?mk.dash.join(','):''); (groups[key]=groups[key]||{mk,runs:[]}).runs.push(g); }); const yD=(x,z)=>ez(x,z)+Y.mark+HFany(x,z)+0.002;
+    Object.values(groups).forEach(({mk,runs})=>joinRuns(runs,1.2).forEach(r=>(mk.kind==='centre'?Q.yellow:Q.white).line(r, mk.kind==='park'?0.08:mk.w, yD, mk.dash))); }
   // existing bikeways at their position across the street, by type and direction; protected lanes get their buffer
   // (on the host street's own centreline; pieces no street carries are paths of their own — see cityContext)
-  C.bikeHosted.forEach(h=>{ if(!inR(h.g)) return; const base=h.g, b={ctc:h.ctc}; const yH=h.st._yM||yRoad, hf=h.st.deck?((x,z)=>deckAt(h.st,x,z)):null;   // lanes on a deck ride on it
+  // v3: existing lanes on structures as continuous chains (one polyline per lane along the deck, following its edges through
+  // tapers and merges); the height comes from whichever piece of the structure the point is on
+  (C.bikeChains||[]).forEach(c=>{ if(!inR(c.g)) return; const yH=(x,z)=>ez(x,z)+Y.mark+c.h(x,z); const lineQ=(Q,gg,w)=>clipPoly(gg,BOX).forEach(p=>Q.line(p,w,yH));
+    lineQ(c.kind==='prot'?Q.bike:Q.paint,c.g,c.w); lineQ(Q.white,offsetLine(c.g,-c.w/2),0.1); lineQ(Q.white,offsetLine(c.g,c.w/2),0.1);
+    if(c.buf) strip(c.buf,0.6,M.ctxBuf,Y.walk,0.45,c.h); });
+  C.bikeHosted.forEach(h=>{ if(!inR(h.g)||h.chained) return; const base=h.g, b={ctc:h.ctc}; const yH=h.st._yM||yRoad, hf=h.st.deck?((x,z)=>deckAt(h.st,x,z)):null;   // lanes on a deck ride on it
     bikewayLanes(h.b,h.ctc,'L').forEach(l=>{
       if(l.kind==='shared'){ [-b.ctc/4,b.ctc/4].forEach(off=>{ alongLine(offsetLine(base,off),12,6).forEach(([x,z,ux,uz])=>{ if(inBox(x,z)) Q.shared.seg(x-ux*0.6,z-uz*0.6,x+ux*0.6,z+uz*0.6,0.5,yH); }); }); return; }
       const cg=offsetLine(base,l.off); const lineQ=(Q,gg,w)=>clipPoly(gg,BOX).forEach(p=>Q.line(p,w,yH)); lineQ(l.kind==='prot'?Q.bike:Q.paint,cg,l.w); lineQ(Q.white,offsetLine(cg,-l.w/2),0.1); lineQ(Q.white,offsetLine(cg,l.w/2),0.1);

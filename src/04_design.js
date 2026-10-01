@@ -41,7 +41,7 @@ function openDesign(s){
   if(typeof showSV==='function') showSV(false);   // v3: the street-view mini window for checking the existing street
 }
 // v3: the block's place in the project
-function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`in <b>${esc(p.name)}</b>${rec.auto?' (default option — save to keep this design)':' (designed)'}`:(activeProp()?'not in a proposal · saves to '+esc(activeProp().name):'not in a proposal'); }
+function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`in <b>${esc(p.name)}</b>${rec.auto?' (default option; save to keep this design)':' (designed)'}`:(activeProp()?'not in a proposal · saves to '+esc(activeProp().name):'not in a proposal'); }
 $('btn-prop').onclick=()=>{ const o=curOpt(); if(!o||!D.ctx) return; const p=propStore(D.ctx.seg,o,D.ctx); renderPropNote(); toast('Saved to '+p.name+' · '+Object.keys(p.blocks).length+' block'+(Object.keys(p.blocks).length===1?'':'s')+' — back to the map to continue'); };
 // v3: the existing widths — standard widths from the lane count and parking, editable when measured on site or in a photo;
 // the curb-to-curb follows the sum, and the proposed section is regenerated from it
@@ -127,8 +127,8 @@ $('btn-balance').onclick=()=>{ const o=curOpt(); if(!o) return; const c=D.ctx; c
 
 function renderPanels(){ const o=curOpt(); if(!o) return; const c=D.ctx;
   const issues=checkCompliance(o,c); const errs=issues.filter(i=>i.lvl==='err').length, warns=issues.length-errs;
-  $('status').innerHTML = errs? `<span class="tag err">Non-compliant · ${errs} issue${errs>1?'s':''}</span>` : warns? `<span class="tag warn">Compliant with notes</span>` : `<span class="tag ok">Compliant</span>`;
-  $('warnings').innerHTML = issues.length? issues.map(i=>`<div class="msg ${i.lvl}">${i.lvl==='err'?'⛔':'⚠'}<span>${i.msg}</span></div>`).join('') : '<div class="msg ok">✓<span>All widths within EDM Tables 8-6, 8-7 and 8-10 and the facility connects correctly to the network.</span></div>';
+  $('status').innerHTML = errs? `<span class="tag err">Not compliant · ${errs} issue${errs>1?'s':''}</span>` : warns? `<span class="tag warn">Compliant with notes</span>` : `<span class="tag ok">Compliant</span>`;
+  $('warnings').innerHTML = issues.length? issues.map(i=>`<div class="msg ${i.lvl}">${i.lvl==='err'?'⛔':'⚠'}<span>${i.msg}</span></div>`).join('') : '<div class="msg ok">✓<span>All widths meet the Engineering Design Manual (Tables 8-6, 8-7 and 8-10) and the lane connects to the network.</span></div>';
   $('recs').innerHTML = recommendations(o,c).map(r=>`<div class="msg info">💡<span>${r}</span></div>`).join('');
   const pros=[], cons=[...(o.tradeoffs||[])];
   // v2: what changes against the facility that is there today

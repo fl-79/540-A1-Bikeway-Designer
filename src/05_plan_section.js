@@ -176,7 +176,9 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     // usual plan convention), so it reads as raised above whatever it passes over
     const elevated=st=>st.up&&st.deck&&Math.max(st.deck[0],st.deck[1],st.deck[2])>0.5;
     const u=C.F.u, sh=lv=>{ const wx=2.4*lv, wy=-2.4*lv; return [wx*u[1]-wy*u[0], wx*u[0]+wy*u[1]]; }, shift=(g,d)=>g.map(([x,z])=>[x+d[0],z+d[1]]);
-    const hostedLanes=list=>list.forEach(h=>{ const base=h.g;
+    // v3: existing lanes on structures come as continuous chains (cityContext.bikeChains): one polyline per lane along the deck
+    const drawChains=list=>list.forEach(c=>{ poly(c.g,c.w,c.kind==='prot'?'rgba(125,165,135,.85)':'rgba(165,185,170,.7)'); if(c.buf) poly(c.buf,0.6,'#CFCCC4'); });
+    const hostedLanes=list=>list.forEach(h=>{ const base=h.g; if(h.chained) return;
       bikewayLanes(h.b,h.ctc,'L').forEach(l=>{
         if(l.kind==='shared'){ [-h.ctc/4,h.ctc/4].forEach(off=>poly(offsetLine(base,off),0.5,'rgba(110,135,120,.75)',[1.2,10])); return; }
         const cg=offsetLine(base,l.off); poly(cg,l.w,l.kind==='prot'?'rgba(125,165,135,.85)':'rgba(165,185,170,.7)');
@@ -216,9 +218,13 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
       list.forEach(st=>{ if(hosted(st)) return; if(tapered(st)) fillEdges(st.E.pav,'#9EA09F'); else stroke(st._pav, Math.max(1,st.m.ctc*S), up?'#9EA09F':'#A9ABA9'); });
       // existing lane markings from each street's traffic model: yellow centreline on two-way streets,
       // dashed lane lines where the width gives more than one lane per direction, faint parking-lane edges
-      ctx.lineCap='butt'; list.forEach(st=>{ streetMarkings(st).forEach(mk=>{ const col=mk.kind==='centre'?'rgba(255,214,0,.85)':mk.kind==='park'?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)'; (up?dropInside(mk.g,p=>inOther(st,p)):[mk.g]).forEach(r=>poly(r, mk.w, col, mk.dash)); });
+      // v3: on structures the marking runs of every piece are collected and joined end to end (joinRuns) before drawing, so a lane
+      // line is one continuous polyline along the deck and its dashes run through the nodes
+      ctx.lineCap='butt'; const colOf=k=>k==='centre'?'rgba(255,214,0,.85)':k==='park'?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)'; const acc={};
+      list.forEach(st=>{ streetMarkings(st).forEach(mk=>{ if(!up){ poly(mk.g, mk.w, colOf(mk.kind), mk.dash); return; } const key=mk.kind+'|'+mk.w+'|'+(mk.dash?mk.dash.join(','):''); (acc[key]=acc[key]||{mk,runs:[]}).runs.push(...dropInside(mk.g,p=>inOther(st,p))); });
         // v3: the gore lane line — the deck's old edge, dashed, between the ramp lane and the deck's outer lane until the taper closes
-        if(up&&st.E) [...st.E.pav.merges].forEach(m=>poly(m.line,0.12,'rgba(255,255,255,.85)',[2,3.5])); });
+        if(up&&st.E) [...st.E.pav.merges].forEach(m=>{ const key='lane|0.12|2,3.5'; (acc[key]=acc[key]||{mk:{kind:'lane',w:0.12,dash:[2,3.5]},runs:[]}).runs.push(m.line); }); });
+      Object.values(acc).forEach(({mk,runs})=>joinRuns(runs,1.2).forEach(r=>poly(r, mk.w, colOf(mk.kind), mk.dash)));
       // curb and property lines (a structure's edges read darker; a deck's outer line is its parapet), stopping at a crossing
       // street only on the side it leaves from (per-side trims); on decks, only outside every other structure
       list.forEach(st=>{ if(hosted(st)) return; const bw=bandW(st); [st.m.ctc/2, -st.m.ctc/2, bw/2, -bw/2].forEach((off,k)=>{ const sd=off>0?'R':'L'; const g=up?st._pav:trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(g.length<2) return;
@@ -241,8 +247,9 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     const overBlock=(g,hAt)=>{ const pts=[g[0],...alongLine(g,3,1.5).map(q=>[q[0],q[1]]),g[g.length-1]]; return pts.some(p=>Math.abs(p[0])<xR-xL && p[1]>-2 && p[1]<LEN+2 && hAt(p)>bh(p[1])+0.5); };
     const upS=C.streets.filter(elevated), overS=upS.filter(st=>overBlock(st.g,p=>deckAtSt(st,p[0],p[1]))), sameS=upS.filter(st=>!overS.includes(st));
     const upP=C.osmPaths.filter(p=>p.up), overP=upP.filter(p=>overBlock(p.g,()=>(p.lvl||1)*6)), sameP=upP.filter(p=>!overP.includes(p));
-    drawStreets(sameS,true); sameP.forEach(p=>pathP(p.g,p.ow?2.0:3.0,p)); hostedLanes(C.bikeHosted.filter(h=>h.st.up&&!overS.includes(h.st)));
-    S_.drawOver=()=>{ if(!overS.length&&!overP.length) return; drawStreets(overS,true); overP.forEach(p=>pathP(p.g,p.ow?2.0:3.0,p)); hostedLanes(C.bikeHosted.filter(h=>overS.includes(h.st))); };
+    const chains=C.bikeChains||[]; const overC=c=>c.hosts.some(st=>overS.includes(st));
+    drawStreets(sameS,true); sameP.forEach(p=>pathP(p.g,p.ow?2.0:3.0,p)); hostedLanes(C.bikeHosted.filter(h=>h.st.up&&!overS.includes(h.st))); drawChains(chains.filter(c=>!overC(c)));
+    S_.drawOver=()=>{ if(!overS.length&&!overP.length) return; drawStreets(overS,true); overP.forEach(p=>pathP(p.g,p.ow?2.0:3.0,p)); hostedLanes(C.bikeHosted.filter(h=>overS.includes(h.st))); drawChains(chains.filter(overC)); };
     C.nodes.forEach(nd=>{ const r=Math.max(6,(nd.row-7.2)/2);
       if(nd.sig){ ctx.fillStyle='#2F3B45'; ctx.fillRect(X(nd.x+r*.75)-.2*S,Y(nd.z+r*.75)-.2*S,.4*S,.4*S); ctx.fillStyle='#34C759'; ctx.beginPath(); ctx.arc(X(nd.x+r*.75),Y(nd.z+r*.75),.1*S,0,Math.PI*2); ctx.fill(); } });
     // street names with their existing traffic (class · speed · lanes · direction · parking · bus/truck · facility).
