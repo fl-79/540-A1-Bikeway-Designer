@@ -69,8 +69,14 @@ function init3D(){ if(T3.renderer) return; const c=$('c3d'); T3.renderer=new THR
   c.addEventListener('dblclick',()=>{ T3.az=-Math.PI/4; T3.el=Math.atan(1/Math.sqrt(2)); T3.zoom=0.7; updateCam(); render3D(); }); }
 function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; const halves=(D.before&&!D.only)?2:1; const aspect=(W/halves)/H; const ext=T3.extent; const span=Math.max(ext.len*0.75, ext.w*1.6)/T3.zoom; T3.cam.left=-span*aspect/2; T3.cam.right=span*aspect/2; T3.cam.top=span/2; T3.cam.bottom=-span/2; T3.cam.updateProjectionMatrix();
   const t=T3.target; T3.cam.position.set(t.x+T3.dist*Math.cos(T3.el)*Math.sin(T3.az), t.y+T3.dist*Math.sin(T3.el), t.z+T3.dist*Math.cos(T3.el)*Math.cos(T3.az)); T3.cam.lookAt(t); scaleLabels(); }
-function render3D(){ const r=T3.renderer, c=$('c3d'); const W=c.clientWidth*devicePixelRatio, H=c.clientHeight*devicePixelRatio; if(c.width!==W||c.height!==H){ r.setSize(c.clientWidth,c.clientHeight,false); }
-  r.setScissorTest(true);
+// v3: the pixel scale is re-read on every draw. It changes when the browser is zoomed (Ctrl +/−) or the window moves to a screen
+// with a different display scaling; set only once at start, the drawing buffer stopped matching the canvas, the two panes were
+// drawn at the wrong widths and the strip between them was left undrawn (a black bar). The viewports now use the buffer's real
+// size, and the whole canvas is cleared to the background first, so a gap can never show black.
+function render3D(){ const r=T3.renderer, c=$('c3d'); const dpr=devicePixelRatio||1; if(r.getPixelRatio()!==dpr) r.setPixelRatio(dpr);
+  if(c.width!==Math.floor(c.clientWidth*dpr)||c.height!==Math.floor(c.clientHeight*dpr)){ r.setSize(c.clientWidth,c.clientHeight,false); }
+  const W=c.width, H=c.height;
+  r.setScissorTest(false); r.setViewport(0,0,W,H); r.clear(); r.setScissorTest(true);
   const pc=T3.propCtx;   // v3: the proposal's other blocks show in the proposed view only
   if (D.before&&!D.only) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const dpr=devicePixelRatio; const wb=Math.round((pb.right-cr.left)*dpr), xa=Math.round((pa.left-cr.left)*dpr);   // the panes' own widths (draggable divider)
     T3.groups.after.visible=false; T3.groups.before.visible=true; if(pc) pc.visible=false; r.setViewport(0,0,wb,H); r.setScissor(0,0,wb,H); r.render(T3.scene,T3.cam);
