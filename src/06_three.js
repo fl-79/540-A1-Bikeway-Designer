@@ -70,18 +70,21 @@ function init3D(){ if(T3.renderer) return; const c=$('c3d'); T3.renderer=new THR
 function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; const halves=(D.before&&!D.only)?2:1; const aspect=(W/halves)/H; const ext=T3.extent; const span=Math.max(ext.len*0.75, ext.w*1.6)/T3.zoom; T3.cam.left=-span*aspect/2; T3.cam.right=span*aspect/2; T3.cam.top=span/2; T3.cam.bottom=-span/2; T3.cam.updateProjectionMatrix();
   const t=T3.target; T3.cam.position.set(t.x+T3.dist*Math.cos(T3.el)*Math.sin(T3.az), t.y+T3.dist*Math.sin(T3.el), t.z+T3.dist*Math.cos(T3.el)*Math.cos(T3.az)); T3.cam.lookAt(t); scaleLabels(); }
 // v3: the pixel scale is re-read on every draw. It changes when the browser is zoomed (Ctrl +/−) or the window moves to a screen
-// with a different display scaling; set only once at start, the drawing buffer stopped matching the canvas, the two panes were
-// drawn at the wrong widths and the strip between them was left undrawn (a black bar). The viewports now use the buffer's real
-// size, and the whole canvas is cleared to the background first, so a gap can never show black.
+// with a different display scaling; set only once at start, the drawing buffer stopped matching the canvas.
+// Viewports and scissors are given in CSS pixels: three.js multiplies them by the pixel ratio itself. They used to be multiplied
+// here as well, so on a screen scaled above 100 % the existing view ran past the divider and the proposed view started too far
+// right, leaving a strip between them. Each pane also gets its own width-to-height ratio (paneCam), so dragging the divider
+// widens or narrows a view instead of stretching it. The whole canvas is cleared to the background first.
+function paneCam(w,h){ const c=T3.cam; const span=c.top-c.bottom; const a=Math.max(0.05,w/Math.max(1,h)); c.left=-span*a/2; c.right=span*a/2; c.updateProjectionMatrix(); }
 function render3D(){ const r=T3.renderer, c=$('c3d'); const dpr=devicePixelRatio||1; if(r.getPixelRatio()!==dpr) r.setPixelRatio(dpr);
-  if(c.width!==Math.floor(c.clientWidth*dpr)||c.height!==Math.floor(c.clientHeight*dpr)){ r.setSize(c.clientWidth,c.clientHeight,false); }
-  const W=c.width, H=c.height;
+  const W=c.clientWidth, H=c.clientHeight;
+  if(c.width!==Math.floor(W*dpr)||c.height!==Math.floor(H*dpr)){ r.setSize(W,H,false); }
   r.setScissorTest(false); r.setViewport(0,0,W,H); r.clear(); r.setScissorTest(true);
   const pc=T3.propCtx;   // v3: the proposal's other blocks show in the proposed view only
-  if (D.before&&!D.only) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const dpr=devicePixelRatio; const wb=Math.round((pb.right-cr.left)*dpr), xa=Math.round((pa.left-cr.left)*dpr);   // the panes' own widths (draggable divider)
-    T3.groups.after.visible=false; T3.groups.before.visible=true; if(pc) pc.visible=false; r.setViewport(0,0,wb,H); r.setScissor(0,0,wb,H); r.render(T3.scene,T3.cam);
-    T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; r.setViewport(xa,0,W-xa,H); r.setScissor(xa,0,W-xa,H); r.render(T3.scene,T3.cam); }
-  else { const bf=D.only==='before'; T3.groups.before.visible=bf; T3.groups.after.visible=!bf; if(pc) pc.visible=!bf; r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }   // v3: step 1 — the existing street alone, full width
+  if (D.before&&!D.only) { const cr=c.getBoundingClientRect(), pb=$('p3d-b').getBoundingClientRect(), pa=$('p3d-a').getBoundingClientRect(); const wb=Math.max(1,Math.round(pb.right-cr.left)), xa=Math.min(W-1,Math.round(pa.left-cr.left));   // the panes' own widths (draggable divider), CSS px
+    T3.groups.after.visible=false; T3.groups.before.visible=true; if(pc) pc.visible=false; paneCam(wb,H); r.setViewport(0,0,wb,H); r.setScissor(0,0,wb,H); r.render(T3.scene,T3.cam);
+    T3.groups.before.visible=false; T3.groups.after.visible=true; if(pc) pc.visible=true; paneCam(W-xa,H); r.setViewport(xa,0,W-xa,H); r.setScissor(xa,0,W-xa,H); r.render(T3.scene,T3.cam); }
+  else { const bf=D.only==='before'; T3.groups.before.visible=bf; T3.groups.after.visible=!bf; if(pc) pc.visible=!bf; paneCam(W,H); r.setViewport(0,0,W,H); r.setScissor(0,0,W,H); r.render(T3.scene,T3.cam); } }   // v3: step 1 — the existing street alone, full width
 
 function build3D(){ init3D(); const o=curOpt(); if(!o) return; ['before','after'].forEach(k=>{ if(T3.groups[k]) T3.scene.remove(T3.groups[k]); }); T3.movers=[]; T3.labels=[];
   TZ0 = elevAt(o && D.ctx ? D.ctx.seg.g[0][0] : 0, D.ctx.seg.g[0][1]);
