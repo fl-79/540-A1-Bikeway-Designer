@@ -474,7 +474,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   const bollard=(cx,cz)=>{ ctx.fillStyle='#2A2A2A'; ctx.beginPath(); ctx.arc(X(cx),Y(cz),Math.max(1.5,.07*S),0,Math.PI*2); ctx.fill(); };
   sw.forEach(s=>{ const sd=s.side, t=S_.tr[sd]; if(!t||!t.n) return; const tx=sd==='L'?s.x+s.w*.75:s.x+s.w*.25; const sp=Math.max(6,t.sp); for(let z=(sd==='L'?3.1:7.4)%sp+ (ends[0]?5:0); z<LEN-3; z+=sp){ if(!inLaneAt(S_,sd,z)) tree(tx,z,t.h); } });
   // existing street trees on the surrounding streets (public-trees), flat and lighter so the context stays quiet
-  if (D.city) { S_.C.streets.forEach(st=>{ streetTrees(st, S_.C.streets).forEach(t=>{ const r=clamp(t.h*.19,.6,2.4); ctx.fillStyle='rgba(140,170,120,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),r*S,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(70,95,60,.35)'; ctx.lineWidth=LWT.hair; ctx.stroke(); ctx.fillStyle='rgba(60,50,40,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),.1*S,0,Math.PI*2); ctx.fill(); }); }); }
+  if (D.city) { S_.C.streets.forEach(st=>{ streetTrees(st, S_.C.streets).forEach(t=>{ if(nearStructure(S_.C,t.x,t.z)) return;   /* v3: no tree under or on a deck or ramp */ const r=clamp(t.h*.19,.6,2.4); ctx.fillStyle='rgba(140,170,120,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),r*S,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(70,95,60,.35)'; ctx.lineWidth=LWT.hair; ctx.stroke(); ctx.fillStyle='rgba(60,50,40,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),.1*S,0,Math.PI*2); ctx.fill(); }); }); }
   els.filter(e=>e.k==='buf'&&!/^(barrier|paint|raisedlane)$/.test(SEP[e.sep].bufKind)).forEach(bf=>{ for(let z=zp0+1.5;z<zp1-.5;z+=3){ if(!inLaneAt(S_,bf.side,z)) bollard(bf.x+bf.w/2,z); } });
   park.forEach(pk=>{ const cx=pk.x+pk.w/2; for(let z=z0m+3.5;z<z1m-2;z+=6.4){ if(!inLaneAt(S_,pk.side,z-2.2)&&!inLaneAt(S_,pk.side,z+2.2)&&R()<.7) car(cx,z,['#EEF0F2','#DCE1E6','#E6E9EC'][Math.floor(R()*3)]); } });
   const mv=(z,v)=>{ const span=z1m-z0m-8; return z0m+4+(((z-z0m-4)+v*S_.t)%span+span)%span; };
@@ -502,9 +502,15 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   const hDim=(x1,x2,y,label,i)=>dimString(ctx,canvas,v,dpr,k,fs,dimCol,S,X,x1,x2,y,label,i,DIMS);
   if(showDims){ ctx.strokeStyle='rgba(30,30,30,.4)'; ctx.lineWidth=.6*k*dpr; ctx.setLineDash([2*k*dpr,3*k*dpr]); els.forEach(e=>{ [e.x,e.x+e.w].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),r1-14*k*dpr); ctx.lineTo(X(x),r1+8*k*dpr); ctx.stroke(); }); }); ctx.setLineDash([]);
     els.forEach((e,i)=>hDim(e.x,e.x+e.w,r1,fmt(e.w),e.k==='sw'?null:i)); hDim(cXL,cXR,r2,fmt(cXR-cXL)); hDim(xL,xR,r3,fmt(xR-xL)); }
-  // north arrow (fixed) and scale bar (zooms) — orientation, kept when annotations are off
-  ctx.save(); ctx.setTransform(1,0,0,1,0,0); const nx=W-26*dpr, ny=padT; ctx.strokeStyle=dimCol; ctx.lineWidth=1*dpr; ctx.beginPath(); ctx.moveTo(nx,ny+16*dpr); ctx.lineTo(nx,ny-4*dpr); ctx.stroke(); ctx.fillStyle=dimCol; ctx.beginPath(); ctx.moveTo(nx,ny-6*dpr); ctx.lineTo(nx-4*dpr,ny+2*dpr); ctx.lineTo(nx+4*dpr,ny+2*dpr); ctx.closePath(); ctx.fill(); ctx.font=`${9*dpr}px JetBrains Mono`; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(c.seg.ns?'N':'E',nx,ny+18*dpr); ctx.restore();
-  const sbX=X(sceneXL), sbY=Y(0)+92*dpr; for(let i=0;i<5;i++){ ctx.fillStyle=i%2?'#F4F3EF':dimCol; ctx.fillRect(sbX+i*S,sbY-4*dpr,S,4*dpr); ctx.strokeStyle=dimCol; ctx.strokeRect(sbX+i*S,sbY-4*dpr,S,4*dpr); } ctx.fillStyle=dimCol; ctx.font=`${fs}px JetBrains Mono`; ctx.textAlign='left'; ctx.textBaseline='bottom'; ctx.fillText('0',sbX,sbY-6*dpr); ctx.textAlign='right'; ctx.fillText('5 m',sbX+5*S,sbY-6*dpr);
+  // v3: a true north arrow in every plan (the frame is rotated to the block, so the arrow is rotated to north); kept when
+  // annotations are off
+  { const u=S_.C.F.u; const ax=-u[0], ay=-u[1];   /* world north in the block's frame is (−u.x, u.y); on the canvas (y down) that is (−u.x, −u.y) */
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0); const nx=W-30*dpr, ny=padT+14*dpr; const L=11*dpr;
+    ctx.beginPath(); ctx.arc(nx,ny,16*dpr,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.8)'; ctx.fill(); ctx.strokeStyle='rgba(30,30,30,.25)'; ctx.lineWidth=1*dpr; ctx.stroke();
+    ctx.strokeStyle=dimCol; ctx.beginPath(); ctx.moveTo(nx-ax*L*0.6,ny-ay*L*0.6); ctx.lineTo(nx+ax*L,ny+ay*L); ctx.stroke();
+    const px=-ay, py=ax; ctx.fillStyle=dimCol; ctx.beginPath(); ctx.moveTo(nx+ax*(L+3*dpr),ny+ay*(L+3*dpr)); ctx.lineTo(nx+ax*(L-6*dpr)+px*4*dpr,ny+ay*(L-6*dpr)+py*4*dpr); ctx.lineTo(nx+ax*(L-6*dpr)-px*4*dpr,ny+ay*(L-6*dpr)-py*4*dpr); ctx.closePath(); ctx.fill();
+    ctx.font=`700 ${8*dpr}px Inter, sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('N',nx+ax*(L+9*dpr),ny+ay*(L+9*dpr)); ctx.restore(); }
+  /* v3: the 5 m scale bar by the block's end is gone — it read as a dimension of the street; the dimension strings carry the measures */
   // v2: raised elements get a curb line along both edges; the proposed pane gets the edit overlay
   els.forEach(e=>{ if(e.k==='sw'||!(e.h>0.05)) return; ctx.strokeStyle='rgba(40,40,40,.8)'; ctx.lineWidth=LWT.med; [e.x,e.x+e.w].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),Y(ZA)); ctx.lineTo(X(x),Y(ZB)); ctx.stroke(); }); });
   if (opts.editable && D.editOn!==false) { const toPx=x=>v.z*X(x)+v.x, toPy=z=>v.z*Y(z)+v.y;

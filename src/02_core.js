@@ -962,6 +962,9 @@ function cityContext(s, R){ const exk=[...CTX_EXCLUDE].join(','); if (CTX_CACHE.
   // whole proposal is seen, not one block)
   const propLanes=(typeof proposalContextLanes==='function')?proposalContextLanes(s,F,near):[];
   const v={streets,bike,bikeHosted,bikeChains,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.ex=exk; CTX_CACHE.v=v; return v; }
+// v3: is a point under or on a structure piece (deck, ramp, its edge band)? Street trees are not placed there — they stood through
+// the decks of the bridges and overpasses they passed under
+function nearStructure(C,x,z,m){ m=m==null?2.5:m; return C.streets.some(st=>{ if(!st.deck) return false; if(st.E&&st.E.band&&st.E.band.L&&st.E.band.R){ const ring=[...st.E.band.L,...st.E.band.R.slice().reverse()]; if(pointInRing(x,z,ring)) return true; } return nearOnPoly([x,z],st.g)[0]<(st.deck?structBandW(st):st.m.ctc)/2+m; }); }
 function pointInRing(x,z,r){ let inside=false; for(let i=0,j=r.length-1;i<r.length;j=i++){ const [xi,zi]=r[i], [xj,zj]=r[j]; if(((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/((zj-zi)||1e-9)+xi)) inside=!inside; } return inside; }
 
 // ── v2: review export — every block end the tool reads as something special, for checking against Google Maps ──────────

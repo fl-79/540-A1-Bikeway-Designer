@@ -4,7 +4,7 @@
 const D = { ctx:null, options:[], cur:0, before:true, anim:false, city:true, view:'3d', beforeEls:[] };   // v3: the before view is on by default, beside the street panel
 function showMap(){ $('screen-map').classList.add('active'); $('screen-design').classList.remove('active'); $('btn-back').style.display='none'; stop3D(); mapResize(); drawMap(); }
 function showDesign(){ $('screen-map').classList.remove('active'); $('screen-design').classList.add('active'); $('btn-back').style.display='inline-block'; }
-$('btn-back').onclick=()=>{ if(typeof propNavKeep==='function') propNavKeep(); const p=D.prop&&PROJ.proposals.find(x=>x.id===D.prop.id); showMap(); if(p) showPropCard(p); };   // v3: a proposal block's design is kept on the way back
+$('btn-back').onclick=()=>{ if(D.mode==='review'&&typeof stepDone==='function'){ stepDone(); return; } /* v3: leaving from the review is the same as Done — the proposal is completed */ if(typeof propNavKeep==='function') propNavKeep(); const p=D.prop&&PROJ.proposals.find(x=>x.id===D.prop.id); showMap(); if(p) showPropCard(p); };   // v3: a proposal block's design is kept on the way back
 $('btn-collapse').onclick=()=>{ const b=$('bottom'); b.classList.toggle('collapsed'); $('btn-collapse').textContent=b.classList.contains('collapsed')?'▴ Show panel':'▾ Hide panel'; setTimeout(redrawViews,220); };
 // v3: the bottom panel shows either the design columns or the proposal's bike score
 function setBottomTab(t){ if(typeof setMode==='function') setMode(t==='score'?'review':'design'); }   // v3: the bottom panel follows the step (04f_steps.js)

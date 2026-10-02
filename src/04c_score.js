@@ -59,12 +59,16 @@ function propStats(p, extra){ const blocks=propBlocks(p).filter(Boolean); const 
   // grades along the proposal, from the contour grid
   const gs=blocks.flatMap(blockGrades); const gl=gs.reduce((a,x)=>a+x.l,0)||1; const gmax=gs.length?Math.max(...gs.map(x=>x.g)):0; const gmean=gs.reduce((a,x)=>a+x.g*x.l,0)/gl; const steep=gs.filter(x=>x.g>0.05).reduce((a,x)=>a+x.l,0), mod=gs.filter(x=>x.g>0.03&&x.g<=0.05).reduce((a,x)=>a+x.l,0);
   // bike score: the cells within 400 m of the proposal, before (existing network) and after (with every proposal)
-  let sc=null; if(SCORE){ const wm=propWeights(extra); if(p.id==='tmp') Object.values(p.blocks).forEach(r=>{ wm[r.i]=sepWeight(r.opt&&r.opt.sep); }); const add=laneAdd(wm); const cells=new Set(); pts.forEach(([x,y])=>{ const R=Math.ceil(400/SCORE.c); const ci=Math.floor((x-SCORE.x0)/SCORE.c), cj=Math.floor((y-SCORE.y0)/SCORE.c); for(let j=cj-R;j<=cj+R;j++) for(let i=ci-R;i<=ci+R;i++){ if(i<0||j<0||i>=SCORE.nx||j>=SCORE.ny) continue; const k=j*SCORE.nx+i; if(!SCORE.mask[k]) continue; const [cx,cy]=cellXY(k); if(Math.hypot(cx-x,cy-y)<=400) cells.add(k); } });
+  // v3: two numbers — this proposal ALONE on the existing network (its own contribution, the number shown first), and the same
+  // cells with EVERY visible proposal added (what the heat map shows); a hidden proposal counts in neither
+  let sc=null; if(SCORE){ const wmAll=propWeights(extra); const wm={}; Object.values(p.blocks).forEach(r=>{ wm[r.i]=sepWeight(r.opt&&r.opt.sep); }); if(extra&&extra.i!=null&&p.blocks[extra.i]) wm[extra.i]=sepWeight(extra.sep); if(p.id==='tmp') Object.values(p.blocks).forEach(r=>{ wmAll[r.i]=sepWeight(r.opt&&r.opt.sep); });
+    const add=laneAdd(wm); const addAll=laneAdd(wmAll); const cells=new Set(); pts.forEach(([x,y])=>{ const R=Math.ceil(400/SCORE.c); const ci=Math.floor((x-SCORE.x0)/SCORE.c), cj=Math.floor((y-SCORE.y0)/SCORE.c); for(let j=cj-R;j<=cj+R;j++) for(let i=ci-R;i<=ci+R;i++){ if(i<0||j<0||i>=SCORE.nx||j>=SCORE.ny) continue; const k=j*SCORE.nx+i; if(!SCORE.mask[k]) continue; const [cx,cy]=cellXY(k); if(Math.hypot(cx-x,cy-y)<=400) cells.add(k); } });
     const acc=(add_)=>{ let t=0,l=0,h=0,d=0,n=0; cells.forEach(k=>{ const c=cellScore(k,add_); if(!c) return; t+=c.total; l+=c.lane; h+=c.hill; d+=c.dest; n++; }); return n?{total:t/n,lane:l/n,hill:h/n,dest:d/n,n}:null; };
-    const before=acc(null), after=acc(add);
+    const before=acc(null), after=acc(add), afterAll=acc(addAll);
     // citywide: the mean over every scored cell, before and after
-    let cb=0,ca=0,cn=0,up=0; for(let k=0;k<SCORE.n;k++){ if(!SCORE.mask[k]) continue; const b=cellScore(k,null).total, a=cellScore(k,add).total; cb+=b; ca+=a; cn++; if(a-b>=1) up++; }
-    sc={before,after,cells:cells.size,city:{before:cb/cn,after:ca/cn,cells:cn,up}}; }
+    let cb=0,ca=0,cn=0,up=0; for(let k=0;k<SCORE.n;k++){ if(!SCORE.mask[k]) continue; const b=cellScore(k,null).total, a=cellScore(k,addAll).total; cb+=b; ca+=a; cn++; if(a-b>=1) up++; }   // citywide: every visible proposal
+    const others=Object.keys(wmAll).filter(i=>!(i in wm)).length;   // blocks of other visible proposals
+    sc={before,after,afterAll,others,cells:cells.size,city:{before:cb/cn,after:ca/cn,cells:cn,up}}; }
   return {blocks:blocks.length, len, cases, seps, conn:{internal,aaa,exist,other,loose,links}, dest:{n:near.length,byCat}, grade:{max:gmax,mean:gmean,steep,mod,len:gl}, score:sc}; }
 
 // ── the statistics panel ──
@@ -95,7 +99,8 @@ function scoreBoxHTML(S, mode){ const sc=S.score; const pc=v=>Math.round(v); con
   const a=sc.after.total, b=sc.before.total, d=a-b; const band=bandOf(a); const col=scoreColor(a);
   if(mode==='row') return `<span class="srow" title="Bike score around this proposal: ${pc(b)} before → ${pc(a)} after" style="color:${col}">${pc(a)}<small>${sgn(d)}</small></span>`;
   if(mode==='chip') return `<b style="color:${col}">${pc(a)}</b> <span class="muted">bike score · ${pc(b)} → ${pc(a)} (${sgn(d)}) · ${band[1]}</span>`;
-  return `<div class="scorebox"><div class="num" style="color:${col}">${pc(a)}</div><div class="grow"><div><b>Bike score</b> around the proposal</div><div class="small muted">${pc(b)} before → ${pc(a)} after <b style="color:${d>=0?'var(--green)':'var(--red)'}">${sgn(d)}</b> · ${band[1]}</div></div><button class="ghost small" data-act="sdet" title="Statistics: how the score is built, connections, grades, photos">Details ▾</button></div>`; }
+  const all=sc.afterAll&&sc.others?`<div class="small muted">with the other visible proposals: <b>${pc(sc.afterAll.total)}</b> (${sgn(sc.afterAll.total-b)}) — what the heat map shows</div>`:'';
+  return `<div class="scorebox"><div class="num" style="color:${col}">${pc(a)}</div><div class="grow"><div><b>Bike score</b> around the proposal · this proposal alone</div><div class="small muted">${pc(b)} before → ${pc(a)} after <b style="color:${d>=0?'var(--green)':'var(--red)'}">${sgn(d)}</b> · ${band[1]}</div>${all}</div><button class="ghost small" data-act="sdet" title="Statistics: how the score is built, connections, grades, photos">Details ▾</button></div>`; }
 // the design page: the proposal's score with the option being edited in place of this block's saved design, recomputed (debounced)
 // whenever the design changes; click → the Bike score tab
 function updateLiveScore(){ const el=$('stp3'); if(!D.ctx) return; /* the Review & score tab carries the live number; the recommendations a one-line gauge */ clearTimeout(updateLiveScore.t); updateLiveScore.t=setTimeout(()=>{ const s=D.ctx.seg; const o=curOpt(); if(!o) return; let p=propOf(s.i); const extra={i:s.i, sep:o.sep};

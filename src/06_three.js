@@ -236,7 +236,7 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
       if(el.k==='bike'){ clipPoly(cg,BOX).forEach(p=>QB.line(p,el.w,yP)); [el.x,el.x+el.w].forEach(x=>clipPoly(offsetLine(pl.g,x),BOX).forEach(p=>QW.line(p,0.1,yP))); }
       else strip(cg, el.w, M.ctxBuf, Y.walk, Math.max(0.05,el.h||0.15)); }); });
     ribbon.target=null; QB.mesh(pg); QW.mesh(pg); g.add(pg); T3.propCtx=pg; }
-  { const trees=[]; C.streets.forEach(st=>{ if(!inR(st.g)) return; streetTrees(st, C.streets).forEach(t=>{ if(inBox(t.x,t.z)) trees.push(t); }); });
+  { const trees=[]; C.streets.forEach(st=>{ if(!inR(st.g)) return; streetTrees(st, C.streets).forEach(t=>{ if(inBox(t.x,t.z)&&!nearStructure(C,t.x,t.z)) trees.push(t); }); });   // v3: no tree under or on a deck or ramp
     if(trees.length){ const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5,0.5,1,8),M.ctxTrunk,trees.length), crown=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,8),M.ctxLeaf,trees.length);
       const mtx=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(), s=new THREE.Vector3();
       trees.forEach((t,i)=>{ const H=clamp(t.h,3,18), r=clamp(H*0.19,0.6,2.4), tw=clamp(t.d/100,0.12,0.5), y0=ez(t.x,t.z)+Y.walk;
@@ -254,11 +254,12 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   //    full detail for the streets meeting the block's ends, a short line for the nearest others
   const EIs=S_.EI, endSegs=new Set(); EIs.forEach(e=>{ (e.segs||[]).concat(e.cont||[]).forEach(o=>endSegs.add(o)); });
   if(D.ann===false) return g;
-  const near=C.streets.filter(st=>{ const mid=st.g[Math.floor(st.g.length/2)]; st._d=Math.hypot(mid[0],mid[1]-LEN/2); return inBox(mid[0],mid[1]) && (endSegs.has(st.s) || st._d<Math.max(LEN,140)*0.9); }).sort((a,b)=>a._d-b._d).slice(0,6);
-  near.forEach(st=>{ const m=st.m; const mid=st.g[Math.floor(st.g.length/2)]; const full=endSegs.has(st.s);
-    const short=`${m.spd} km/h · ${m.lanes} ${m.lanes>1?'lanes':'lane'} ${m.ow?'one-way':'two-way'}${m.bus?' · bus':''}${m.bw?' · '+m.bw.t.toLowerCase():''}`;
-    label3(g,[titleCase(m.n), full?trafficLabel(m):short], mid[0], ez(mid[0],mid[1])+3, mid[1], {fs:full?10.5:9.5, bg:full?'rgba(255,255,255,.92)':'rgba(255,255,255,.78)'}); });
-  const bm=laneModel(c.seg); label3(g,['EXISTING · '+titleCase(c.seg.n), trafficLabel(bm)+(bm.rowFix||c.seg.rowFix?' · right-of-way from adjoining blocks':'')], (S_.xR+S_.sceneXR)/2+4, 12, LEN/2, {fs:10.5, bg:'rgba(255,251,235,.95)', edge:'#D97706'});
+  // v3: concise labels — the four nearest streets, one short line each (the full traffic description is on the card and in the panel)
+  const near=C.streets.filter(st=>{ const mid=st.g[Math.floor(st.g.length/2)]; st._d=Math.hypot(mid[0],mid[1]-LEN/2); return inBox(mid[0],mid[1]) && (endSegs.has(st.s) || st._d<Math.max(LEN,140)*0.9); }).sort((a,b)=>a._d-b._d).slice(0,4);
+  near.forEach(st=>{ const m=st.m; const mid=st.g[Math.floor(st.g.length/2)];
+    const short=`${m.spd} km/h · ${m.lanes} ${m.lanes>1?'lanes':'lane'}${m.ow?' one-way':''}${m.bw?' · '+(m.bw.t==='Protected Bike Lanes'?'protected lane':m.bw.t==='Painted Lanes'?'painted lane':m.bw.t==='Local Street'?'local bikeway':'sharrows'):''}`;
+    label3(g,[titleCase(m.n), short], mid[0], ez(mid[0],mid[1])+3, mid[1], {fs:8.5, bg:'rgba(255,255,255,.8)', wrap:60}); });
+  const bm=laneModel(c.seg); label3(g,['EXISTING · '+titleCase(c.seg.n), `${bm.spd} km/h · ${bm.lanes} ${bm.lanes>1?'lanes':'lane'}${bm.ow?' one-way':''}${bm.park.L||bm.park.R?' · parking':''}`], (S_.xR+S_.sceneXR)/2+4, 12, LEN/2, {fs:9, bg:'rgba(255,251,235,.92)', edge:'#D97706', wrap:60});
   return g; }
 const sw_l=els=>{ const s=els.filter(e=>e.k==='sw'); return s[0].x+s[0].w; }, sw_r=els=>{ const s=els.filter(e=>e.k==='sw'); return s[s.length-1].x; };   // curb lines
 function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(els); const {c,xL,xR,CL,CR,leftW,rightW,sceneXL,sceneXR,LEN,LW,ZA,ZB,RAD}=S_; const ends=S_.cw, EI=S_.EI; const EL=[endLayout(!!ends[0]), endLayout(!!ends[1])];

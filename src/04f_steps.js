@@ -13,7 +13,7 @@
 D.mode='verify'; D.only=null;   // D.only = 'before': the viewport shows the existing street alone
 function curProp(){ return D.prop?PROJ.proposals.find(x=>x.id===D.prop.id):null; }
 function curRec(){ const p=curProp(); return p&&D.ctx?p.blocks[D.ctx.seg.i]:null; }
-function ensureProposal(s){ let p=propOf(s.i); if(!p){ if(!propAdd(s,true)) return null; p=propOf(s.i); } const order=propOrder(p); D.prop={id:p.id, order:order.map(x=>x.i), idx:Math.max(0,order.findIndex(x=>x.i===s.i))}; return p; }
+function ensureProposal(s){ let p=propOf(s.i); if(!p){ if(!propAdd(s,true)) return null; p=propOf(s.i); } PROJ.active=p.id;   /* the proposal on screen is the active one, so Done and the next map click refer to it */ const order=propOrder(p); D.prop={id:p.id, order:order.map(x=>x.i), idx:Math.max(0,order.findIndex(x=>x.i===s.i))}; return p; }
 function blockState(r){ return !r?'new':r.done?'done':r.verified?'verified':'new'; }
 function allDone(p){ const bs=Object.values(p.blocks); return bs.length>0&&bs.every(r=>r.verified&&r.done); }
 const DIR_NAME={one:'one-way lane each side', two:'two-way lane on one side'};
@@ -30,6 +30,7 @@ function renderBlockBar(){ const el=$('blockbar'); const p=curProp(); if(!el) re
 function setMode(m){
   // the review is drawn around the proposal's central block, with the plate widened to the whole proposal and the other blocks
   // taken out of the context (they are built in full instead); leaving it restores the normal plate
+  if(m==='review'&&(!D.prop||!D.ctx)) m='design';   // nothing to review without a proposal on screen
   if(m==='review'){ const cen=reviewCentre(); if(cen!=null&&D.ctx&&cen!==D.ctx.seg.i){ D.pendingReview=true; D.prop.idx=D.prop.order.indexOf(cen); openDesign(SEGS[cen]); return; }
     CTX_EXCLUDE.clear(); D.prop.order.forEach(i=>{ if(i!==D.ctx.seg.i) CTX_EXCLUDE.add(i); }); D.plateHalf=reviewExtent(); CTX_CACHE.id=null; D.before=false; $('tg-before').classList.remove('on'); }
   else if(CTX_EXCLUDE.size||D.plateHalf){ CTX_EXCLUDE.clear(); D.plateHalf=0; CTX_CACHE.id=null; T3.zoom=1; }
@@ -54,7 +55,7 @@ function renderDirSelect(){ const sel=$('prop-dir'); const p=curProp(); if(!sel|
 function setPropDir(v){ const p=curProp(); if(!p) return; p.dir=v||null; let n=0;
   Object.values(p.blocks).forEach(rec=>{ const s=SEGS[rec.i]; if(!s||s===D.ctx.seg) return; const c=applyOverrides(segContext(s),rec.x); const opts=generateOptions(c); if(!opts.length) return; const m=(v&&opts.find(x=>x.mode===v&&x.sep===rec.opt.sep))||(v&&opts.find(x=>x.mode===v))||opts[0]; if(m.mode!==rec.opt.mode){ rec.opt=cloneJ(m); rec.done=false; n++; } });
   projChanged(); const s=D.ctx.seg; openDesign(s); toast(v?(DIR_NAME[v]+' for the whole proposal'+(n?' · '+n+' other block'+(n===1?'':'s')+' re-solved, confirm them again':'')):'Lane direction left to each block'); }
-function stepDone(){ autoSaveDesign(true); const p=curProp(); setMode('design'); showMap(); if(p) showPropCard(p); }
+function stepDone(){ autoSaveDesign(true); const p=curProp(); const finished=p&&allDone(p)&&!p.complete; if(finished){ p.complete=true; projChanged(); } setMode('design'); showMap(); if(p) showPropCard(p); if(finished) toast(p.name+' completed — the next block you click on the map starts a new proposal', 4500); }
 // ── the review's drawings: the whole proposal ──
 function reviewBlocks(){ const p=curProp(); if(!p||!D.ctx) return []; return D.prop.order.filter(i=>i!==D.ctx.seg.i).map(i=>({s:SEGS[i], rec:p.blocks[i]})).filter(b=>b.s&&b.rec&&b.rec.opt); }
 function reviewCentre(){ const p=curProp(); if(!p) return null; const mids=D.prop.order.map(i=>{ const m=polyMid(SEGS[i].g); return {i, m}; }); const cx=mids.reduce((a,b)=>a+b.m[0],0)/mids.length, cy=mids.reduce((a,b)=>a+b.m[1],0)/mids.length; return mids.sort((a,b)=>Math.hypot(a.m[0]-cx,a.m[1]-cy)-Math.hypot(b.m[0]-cx,b.m[1]-cy))[0].i; }
