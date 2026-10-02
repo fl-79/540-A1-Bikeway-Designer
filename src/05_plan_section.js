@@ -12,7 +12,10 @@ function zoomFont(base, lo, hi, v, dpr){ return clamp(base*Math.sqrt(v.z), lo, h
 // elements and buildings, light for secondary lines (property lines, context curbs, hatch boundaries), hairline for paving
 // hatch, vehicles and tree crowns. Weights are screen pixels (× dpr) that grow gently with the zoom (√zoom, capped at 1.8×),
 // returned in drawing units so they hold their hierarchy at every zoom instead of thickening with the geometry.
-function lineWeights(v,dpr){ const f=dpr*clamp(Math.sqrt(v.z),1,1.8)/v.z; return {hair:.35*f, light:.6*f, med:1.0*f, heavy:1.7*f, f}; }
+// v3: dynamic weights — the canvas is scaled by the zoom, so a fixed width would thicken with every zoom step; instead the drawn
+// width stays constant up to 1× and then thins to a little over half by 10× (z^-0.25), so lane dividers, curb and sidewalk lines
+// get lighter as the drawing fills with detail, the way a plotted plan reads at a larger scale
+function lineWeights(v,dpr){ const f=dpr*clamp(Math.pow(v.z,-0.25),0.55,1)/v.z; return {hair:.35*f, light:.6*f, med:1.0*f, heavy:1.7*f, f}; }
 // one width dimension (line, ticks, number) for plan and section. The number sits above the line when it fits between the
 // ticks; in a narrow element it turns to run along the element instead (as a draughtsman would), and it is skipped only when
 // even that does not fit. When `i` is an element index the number is registered as a control (hover / click to type).
@@ -148,7 +151,11 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   // building footprints (2015 layer) — drawn once, complete; the streets are painted over them so a footprint never shows on a road
   const drawBlds=()=>{ ctx.strokeStyle='rgba(40,40,40,.55)'; ctx.lineWidth=LWT.light; S_.C.blds.forEach(b=>{ ctx.fillStyle='#EDEBE5';   /* v3: estimated heights stay flagged in the data, not coloured */ ctx.beginPath(); b.p.forEach((q,i)=>{ i?ctx.lineTo(X(q[0]),Y(q[1])):ctx.moveTo(X(q[0]),Y(q[1])); }); ctx.closePath(); ctx.fill(); ctx.stroke(); }); };
   const stroke=(g,w,col)=>{ if(g.length<2) return; ctx.strokeStyle=col; ctx.lineWidth=w; ctx.beginPath(); g.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); };
-  const poly=(g,w,col,dash)=>{ ctx.strokeStyle=col; ctx.lineWidth=Math.max(.8,w*S); ctx.setLineDash(dash?dash.map(d=>d*S):[]); ctx.beginPath(); g.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); ctx.setLineDash([]); };
+  // v3: painted markings (lane lines, centrelines, edge lines, hatching, stencils) are drawn at their true painted width when
+  // zoomed out but never wider than a fine drawing line when zoomed in, so they thin with the zoom like the rest of the linework
+  // (true scale made a 10 cm line 6–8 px wide at 8×; the old 1-unit minimum also grew with the zoom)
+  const mkW=w=>Math.max(LWT.hair, Math.min(w*S, LWT.med*1.5));
+  const poly=(g,w,col,dash)=>{ ctx.strokeStyle=col; ctx.lineWidth=w<0.25?mkW(w):Math.max(LWT.hair,w*S); ctx.setLineDash(dash?dash.map(d=>d*S):[]); ctx.beginPath(); g.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); ctx.setLineDash([]); };
   // path drawing language — NOT a protected lane: a paved path with hairline edges and a dashed centreline (two-way), a faint
   // green-grey where it is a designated cycleway, plain where bikes share it; decks get medium edges; connectors dashed edges
   const pathP=(g,w,o)=>{ if(g.length<2) return; ctx.lineJoin='round'; ctx.lineCap='round'; stroke(g,w*S,o.des?'#DCE4D5':'#E8E4DA'); ctx.lineCap='butt';
@@ -302,7 +309,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   if(S_.lvl>0 && !S_.host) rect(xL,0,xR-xL,LEN,'#DBD8D0');
   const swPaint=S_.host?((x0,z0,w,dz)=>{}):(S_.lvl>0?((x0,z0,w,dz)=>rect(x0,z0,w,dz,'#E3E0D8')):paving);   /* an existing deck sidewalk is context: plain, no scoring */
   // elements
-  els.forEach(e=>{ const sd=e.side==='C'?'R':e.side; if(e.k==='sw') withGaps(swPaint,e.x,e.w,sd); else if(e.k==='bike'){ asphalt(e.x,ZA,e.w,ZB-ZA); rect(e.x,ZA,e.w,ZB-ZA,'rgba(96,150,110,.45)'); } else if(e.k==='buf'){ withGaps((x0,z0,w,dz)=>{ rect(x0,z0,w,dz, SEP[e.sep].bufKind==='barrier'?'#B5B3AC':SEP[e.sep].bufKind==='raisedlane'?'#DAD7CF':'#CFCCC4'); if(SEP[e.sep].bufKind==='painted'||SEP[e.sep].bufKind==='paint') { rect(x0,z0,w,dz,'#A6A5A2'); ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=Math.max(1,S*.08); for(let z=z0;z<z0+dz;z+=1.2){ ctx.beginPath(); ctx.moveTo(X(x0),Y(z)); ctx.lineTo(X(x0+w),Y(z+.6)); ctx.stroke(); } } },e.x,e.w,sd); } else if(!S_.host) asphalt(e.x,ZA,e.w,ZB-ZA); });   // over a host deck the travel lanes ARE the deck's
+  els.forEach(e=>{ const sd=e.side==='C'?'R':e.side; if(e.k==='sw') withGaps(swPaint,e.x,e.w,sd); else if(e.k==='bike'){ asphalt(e.x,ZA,e.w,ZB-ZA); rect(e.x,ZA,e.w,ZB-ZA,'rgba(96,150,110,.45)'); } else if(e.k==='buf'){ withGaps((x0,z0,w,dz)=>{ rect(x0,z0,w,dz, SEP[e.sep].bufKind==='barrier'?'#B5B3AC':SEP[e.sep].bufKind==='raisedlane'?'#DAD7CF':'#CFCCC4'); if(SEP[e.sep].bufKind==='painted'||SEP[e.sep].bufKind==='paint') { rect(x0,z0,w,dz,'#A6A5A2'); ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=mkW(.08); for(let z=z0;z<z0+dz;z+=1.2){ ctx.beginPath(); ctx.moveTo(X(x0),Y(z)); ctx.lineTo(X(x0+w),Y(z+.6)); ctx.stroke(); } } },e.x,e.w,sd); } else if(!S_.host) asphalt(e.x,ZA,e.w,ZB-ZA); });   // over a host deck the travel lanes ARE the deck's
   ctx.setLineDash([]);
   if(S_.lvl>0 && !S_.host){ ctx.strokeStyle='rgba(40,40,40,.85)'; ctx.lineWidth=LWT.med; [xL,xR].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),Y(0)); ctx.lineTo(X(x),Y(LEN)); ctx.stroke(); }); }   // parapet: the deck's edge
   else if(!S_.host){ ctx.strokeStyle='rgba(15,23,42,.7)'; ctx.lineWidth=LWT.light; ctx.setLineDash([6,3,1.5,3].map(d=>d*LWT.f)); [xL,xR].forEach(x=>{ ctx.beginPath(); ctx.moveTo(X(x),Y(-12)); ctx.lineTo(X(x),Y(LEN+12)); ctx.stroke(); }); ctx.setLineDash([]); }
@@ -326,8 +333,8 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   const z0m = ZA + (EI[0].type==='cross'?EL[0].carStart:(isStop(EI[0])?5.0:0.5)), z1m = ZB - (EI[1].type==='cross'?EL[1].carStart:(isStop(EI[1])?5.0:0.5));
   const zb0 = ZA + (EI[0].type==='cross'?EL[0].bikeStart:(EI[0].type==='dead'?5.0:EI[0].type==='path'?1.0:0.5)), zb1 = ZB - (EI[1].type==='cross'?EL[1].bikeStart:(EI[1].type==='dead'?5.0:EI[1].type==='path'?1.0:0.5));   // at a path end the lane runs on to the hand-over
   const zp0 = EI[0].type==='cross'?ZA+IX.setback+0.5:z0m, zp1 = EI[1].type==='cross'?ZB-IX.setback-0.5:z1m;   // where posts / planters / barrier may stand
-  if(!S_.host) travel.forEach((tl,i)=>{ if(i===0) return; const centre=!tl.ow&&(tl.side==='C'||travel[i-1].side!==tl.side); ctx.strokeStyle=centre?'rgba(255,214,0,.95)':white; ctx.lineWidth=Math.max(1,S*.1); ctx.setLineDash(centre?[]:[S*2,S*1.5]); ctx.beginPath(); ctx.moveTo(X(tl.x),Y(z0m)); ctx.lineTo(X(tl.x),Y(z1m)); ctx.stroke(); ctx.setLineDash([]); });   // over a host deck the deck's own markings run through
-  if(!S_.host) park.forEach(pk=>{ ctx.strokeStyle=white; ctx.lineWidth=Math.max(1,S*.1); for(let z=z0m+1;z<z1m;z+=6){ ctx.beginPath(); ctx.moveTo(X(pk.x),Y(z)); ctx.lineTo(X(pk.x+pk.w),Y(z)); ctx.stroke(); } });
+  if(!S_.host) travel.forEach((tl,i)=>{ if(i===0) return; const centre=!tl.ow&&(tl.side==='C'||travel[i-1].side!==tl.side); ctx.strokeStyle=centre?'rgba(255,214,0,.95)':white; ctx.lineWidth=mkW(.1); ctx.lineCap='butt'; ctx.setLineDash(centre?[]:[S*2,S*1.5]); ctx.beginPath(); ctx.moveTo(X(tl.x),Y(z0m)); ctx.lineTo(X(tl.x),Y(z1m)); ctx.stroke(); ctx.setLineDash([]); });   // over a host deck the deck's own markings run through
+  if(!S_.host) park.forEach(pk=>{ ctx.strokeStyle=white; ctx.lineWidth=mkW(.1); for(let z=z0m+1;z<z1m;z+=6){ ctx.beginPath(); ctx.moveTo(X(pk.x),Y(z)); ctx.lineTo(X(pk.x+pk.w),Y(z)); ctx.stroke(); } });
   // v3: over a host deck the block's bike lanes taper into the deck's existing lanes at each end (10 m), so the lane reads as
   // one lane along the deck that changes width / position smoothly where the design begins and ends
   if(S_.host){ const hl=(S_.C.bikeHosted||[]).filter(h=>h.blockHost); const lanesH=hl.length?bikewayLanes(hl[0].b,hl[0].ctc,'L').filter(l=>l.kind!=='shared'):[];
@@ -336,10 +343,16 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
       bikes.forEach(b=>{ const bc=b.x+b.w/2; let best=null; lanesH.forEach(l=>{ const xe=hx+l.off; const d=Math.abs(xe-bc); if(d<6&&(!best||d<best.d)) best={xe,w:l.w,d}; }); if(!best) return; const T=10, z2=zEnd+sgn*T; const x0=best.xe-best.w/2, x1=best.xe+best.w/2;
         poly4([b.x,zEnd],[b.x+b.w,zEnd],[x1,z2],[x0,z2],'#A9ABA9'); poly4([b.x,zEnd],[b.x+b.w,zEnd],[x1,z2],[x0,z2],'rgba(96,150,110,.45)');
         ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.med; [[b.x,x0],[b.x+b.w,x1]].forEach(([xa,xb])=>{ ctx.beginPath(); ctx.moveTo(X(xa),Y(zEnd)); ctx.lineTo(X(xb),Y(z2)); ctx.stroke(); }); }); }); }
-  const glyph=(cx,cz,dir)=>{ ctx.strokeStyle=white; ctx.fillStyle=white; ctx.lineWidth=Math.max(1,S*.08); const r=.22*S; [-.3,.3].forEach(dz=>{ctx.beginPath();ctx.arc(X(cx),Y(cz+dz*dir),r,0,Math.PI*2);ctx.stroke();}); ctx.beginPath();ctx.moveTo(X(cx),Y(cz-.3*dir));ctx.lineTo(X(cx+.2),Y(cz));ctx.lineTo(X(cx),Y(cz+.3*dir));ctx.stroke(); ctx.beginPath();ctx.ellipse(X(cx),Y(cz+.05*dir),.1*S,.18*S,0,0,Math.PI*2);ctx.fill(); };
+  // the bicycle stencil at its real size (about 1.8 m long, wheels ~0.6 m), drawn as a fine-lined bicycle: two wheels, a frame
+  // triangle from the rear axle to the seat and the bottom bracket, the fork to the front axle, a saddle and handlebar — at a third
+  // of its size with a thick stroke it closed up into two white blobs
+  const glyph=(cx,cz,dir)=>{ ctx.strokeStyle=white; ctx.fillStyle=white; ctx.lineWidth=mkW(.08); ctx.lineCap='round'; ctx.lineJoin='round'; const d=dir||1, r=.3*S;
+    const P=(a,b)=>[X(cx+a),Y(cz+b*d)]; const L=(...pts)=>{ ctx.beginPath(); pts.forEach(([a,b],i)=>{ const [px,py]=P(a,b); i?ctx.lineTo(px,py):ctx.moveTo(px,py); }); ctx.stroke(); };
+    [-.6,.6].forEach(dz=>{ const [px,py]=P(0,dz); ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2); ctx.stroke(); });
+    L([0,-.6],[.22,-.1],[0,.05],[0,-.6]); L([.22,-.1],[.18,.42],[0,.6]); L([0,.05],[.18,.42]); L([.28,-.2],[.16,-.2]); L([.08,.48],[.3,.4]); };
   const arrow=(cx,cz,dir)=>{ ctx.fillStyle=white; const L=1,hw=.26; ctx.beginPath(); ctx.moveTo(X(cx-.07),Y(cz-L/2*dir));ctx.lineTo(X(cx+.07),Y(cz-L/2*dir));ctx.lineTo(X(cx+.07),Y(cz+L*.15*dir));ctx.lineTo(X(cx+hw),Y(cz+L*.15*dir));ctx.lineTo(X(cx),Y(cz+L/2*dir));ctx.lineTo(X(cx-hw),Y(cz+L*.15*dir));ctx.lineTo(X(cx-.07),Y(cz+L*.15*dir));ctx.closePath();ctx.fill(); };
   if(opts.shared){ travel.forEach(tl=>{ const dir=tl.side==='L'?-1:1; for(let z=z0m+6;z<z1m-4;z+=18){ glyph(tl.x+tl.w/2,z,dir); ctx.fillStyle=white; [0,0.5].forEach(o=>{ ctx.beginPath(); ctx.moveTo(X(tl.x+tl.w/2-0.4),Y(z+1.0*dir+o*dir)); ctx.lineTo(X(tl.x+tl.w/2),Y(z+1.4*dir+o*dir)); ctx.lineTo(X(tl.x+tl.w/2+0.4),Y(z+1.0*dir+o*dir)); ctx.lineTo(X(tl.x+tl.w/2),Y(z+1.2*dir+o*dir)); ctx.closePath(); ctx.fill(); }); } }); }
-  bikes.forEach(b=>{ const sd=b.side, cx=b.x+b.w/2; ctx.strokeStyle=white; ctx.lineWidth=Math.max(1,S*.1); [b.x+.06,b.x+b.w-.06].forEach(x=>{ctx.beginPath();ctx.moveTo(X(x),Y(zb0));ctx.lineTo(X(x),Y(zb1));ctx.stroke();});
+  bikes.forEach(b=>{ const sd=b.side, cx=b.x+b.w/2; ctx.strokeStyle=white; ctx.lineWidth=mkW(.1); ctx.lineCap='butt'; [b.x+.06,b.x+b.w-.06].forEach(x=>{ctx.beginPath();ctx.moveTo(X(x),Y(zb0));ctx.lineTo(X(x),Y(zb1));ctx.stroke();});
     if (b.two){ // dividing line: 1.0 m dashes / 3.0 m gaps, solid for the 10 m before each pedestrian crossing (EDM §8.9.1.11)
       ctx.strokeStyle='rgba(255,214,0,.95)'; const s0=ends[0]?zb0+IX.ddlSolid:zb0, s1=ends[1]?zb1-IX.ddlSolid:zb1;
       ctx.setLineDash([S*IX.ddlDash,S*IX.ddlGap]); ctx.beginPath(); ctx.moveTo(X(cx),Y(Math.max(s0,zb0))); ctx.lineTo(X(cx),Y(Math.min(s1,zb1))); ctx.stroke(); ctx.setLineDash([]);
@@ -477,21 +490,44 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   ['L','R'].forEach(sd=>{ (S_.stops[sd]||[]).forEach(([z])=>{ if(z<3||z>LEN-3) return; const sx=sw[sd==='L'?0:1]; const x=sd==='L'?sx.x+sx.w-1.6:sx.x+0.4;
     ctx.fillStyle='#8FA3B4'; ctx.fillRect(X(x),Y(z+2),1.2*S,4*S); ctx.strokeStyle='rgba(40,40,40,.6)'; ctx.lineWidth=LWT.light; ctx.strokeRect(X(x),Y(z+2),1.2*S,4*S); }); });
   ['L','R'].forEach(sd=>{ const n=S_.racks[sd]; if(!n) return; const sx=sw[sd==='L'?0:1]; const x=sd==='L'?sx.x+sx.w-0.9:sx.x+0.6;
-    for(let k=0;k<Math.min(n,8);k++){ const z=6+k*1.1+(LEN-8-Math.min(n,8)*1.1)/2; ctx.strokeStyle='#2A3242'; ctx.lineWidth=Math.max(1,S*.06); ctx.beginPath(); ctx.arc(X(x),Y(z),.35*S,Math.PI*.5,Math.PI*1.5); ctx.stroke(); } });
-  // sprites
-  const car=(cx,cz,col)=>{ const w=1.75,l=4.2; shadow(cx,cz,w*.55,l*.5,.28); ctx.fillStyle=col; ctx.beginPath(); const x0=X(cx-w/2),y0=Y(cz+l/2),r=.35*S; ctx.roundRect?ctx.roundRect(x0,y0,w*S,l*S,r):ctx.rect(x0,y0,w*S,l*S); ctx.fill(); ctx.strokeStyle='rgba(40,40,40,.55)'; ctx.lineWidth=LWT.hair; ctx.stroke(); ctx.fillStyle='rgba(60,70,85,.75)'; ctx.fillRect(X(cx-w/2+.2),Y(cz+l/2-.9),(w-.4)*S,.5*S); ctx.fillRect(X(cx-w/2+.2),Y(cz+l/2-2.2),(w-.4)*S,1*S); };
-  const person=(cx,cz,col)=>{ shadow(cx,cz,.3,.3,.3); ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(X(cx),Y(cz),.24*S,.16*S,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#2A3242'; ctx.beginPath(); ctx.arc(X(cx),Y(cz),.1*S,0,Math.PI*2); ctx.fill(); };
-  const cyc=(cx,cz,col)=>{ shadow(cx,cz,.3,.9,.28); ctx.strokeStyle='#2A3242'; ctx.lineWidth=Math.max(1,S*.06); ctx.beginPath(); ctx.moveTo(X(cx),Y(cz-.85)); ctx.lineTo(X(cx),Y(cz+.85)); ctx.stroke(); ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(X(cx),Y(cz),.28*S,.22*S,0,0,Math.PI*2); ctx.fill(); };
-  const tree=(cx,cz,h)=>{ const r=clamp((h||7)*.19,.6,2.4); shadow(cx,cz,r*.95,r*.95,.22); const g=ctx.createRadialGradient(X(cx)-r*S*.3,Y(cz)-r*S*.3,r*S*.1,X(cx),Y(cz),r*S); g.addColorStop(0,'rgba(190,210,160,.95)'); g.addColorStop(.7,'rgba(120,150,95,.92)'); g.addColorStop(1,'rgba(80,110,70,.9)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(X(cx),Y(cz),r*S,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(50,70,40,.5)'; ctx.lineWidth=LWT.hair; ctx.stroke(); ctx.fillStyle='rgba(60,50,40,.6)'; ctx.beginPath(); ctx.arc(X(cx),Y(cz),.12*S,0,Math.PI*2); ctx.fill(); };
-  const bollard=(cx,cz)=>{ ctx.fillStyle='#2A2A2A'; ctx.beginPath(); ctx.arc(X(cx),Y(cz),Math.max(1.5,.07*S),0,Math.PI*2); ctx.fill(); };
+    for(let k=0;k<Math.min(n,8);k++){ const z=6+k*1.1+(LEN-8-Math.min(n,8)*1.1)/2; ctx.strokeStyle='#2A3242'; ctx.lineWidth=mkW(.06); ctx.beginPath(); ctx.arc(X(x),Y(z),.35*S,Math.PI*.5,Math.PI*1.5); ctx.stroke(); } });
+  // ── sprites: v3 illustration style — outlined plan symbols with light fills; the line does the work (site-plan convention) ──
+  const INK='rgba(40,46,56,.8)', INK2='rgba(40,46,56,.5)';
+  // a car from above: white body with a hairline edge, the cabin outlined, windscreen and rear window as light trapezoids, mirrors, lights
+  const car=(cx,cz,col)=>{ const w=1.75,l=4.2; shadow(cx,cz,w*.55,l*.5,.18); const x0=X(cx-w/2),y0=Y(cz+l/2),r=.4*S; ctx.lineWidth=LWT.hair; ctx.fillStyle=col; ctx.strokeStyle=INK; ctx.beginPath(); ctx.roundRect?ctx.roundRect(x0,y0,w*S,l*S,r):ctx.rect(x0,y0,w*S,l*S); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle=INK2; ctx.beginPath(); ctx.roundRect?ctx.roundRect(X(cx-w/2+.22),Y(cz+1.1),(w-.44)*S,2.2*S,.25*S):ctx.rect(X(cx-w/2+.22),Y(cz+1.1),(w-.44)*S,2.2*S); ctx.stroke();   // cabin
+    ctx.fillStyle='rgba(120,135,150,.28)'; ctx.beginPath(); ctx.moveTo(X(cx-w/2+.25),Y(cz+1.1)); ctx.lineTo(X(cx+w/2-.25),Y(cz+1.1)); ctx.lineTo(X(cx+w/2-.3),Y(cz+.5)); ctx.lineTo(X(cx-w/2+.3),Y(cz+.5)); ctx.closePath(); ctx.fill(); ctx.stroke();   // windscreen
+    ctx.beginPath(); ctx.moveTo(X(cx-w/2+.3),Y(cz-.55)); ctx.lineTo(X(cx+w/2-.3),Y(cz-.55)); ctx.lineTo(X(cx+w/2-.25),Y(cz-1.1)); ctx.lineTo(X(cx-w/2+.25),Y(cz-1.1)); ctx.closePath(); ctx.fill(); ctx.stroke();   // rear window
+    ctx.strokeStyle=INK; ctx.fillStyle=col; [cx-w/2-.2,cx+w/2+.05].forEach(mx=>{ ctx.beginPath(); ctx.rect(X(mx),Y(cz+.75),.15*S,.3*S); ctx.fill(); ctx.stroke(); });   // mirrors
+    ctx.fillStyle='rgba(255,255,255,.95)'; [cx-w/2+.15,cx+w/2-.45].forEach(mx=>{ ctx.beginPath(); ctx.rect(X(mx),Y(cz+l/2),.3*S,.12*S); ctx.fill(); ctx.stroke(); }); };   // headlights
+  // a person from above: two feet mid-stride, shoulders in the figure's colour, a round head — each outlined
+  const person=(cx,cz,col)=>{ shadow(cx,cz,.3,.3,.2); ctx.lineWidth=LWT.hair; ctx.strokeStyle=INK;
+    ctx.fillStyle='rgba(40,46,56,.5)'; [[-.12,.2],[.12,-.2]].forEach(([dx,dz])=>{ ctx.beginPath(); ctx.ellipse(X(cx+dx),Y(cz+dz),.07*S,.13*S,0,0,Math.PI*2); ctx.fill(); });
+    ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(X(cx),Y(cz),.26*S,.14*S,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#E8C9A8'; ctx.beginPath(); ctx.arc(X(cx),Y(cz),.11*S,0,Math.PI*2); ctx.fill(); ctx.stroke(); };
+  // a cyclist from above (riding towards +z·dir): two slim wheels, frame, handlebar, arms to the bar, shoulders, helmet
+  const cyc=(cx,cz,col,dir)=>{ const d=dir||1; shadow(cx,cz,.3,.9,.16); ctx.lineWidth=LWT.hair; ctx.strokeStyle=INK; ctx.fillStyle='rgba(40,46,56,.85)';
+    [.55,-.55].forEach(dz=>{ ctx.beginPath(); ctx.ellipse(X(cx),Y(cz+dz),.035*S,.34*S,0,0,Math.PI*2); ctx.fill(); });
+    ctx.beginPath(); ctx.moveTo(X(cx),Y(cz-.3)); ctx.lineTo(X(cx),Y(cz+.3)); ctx.moveTo(X(cx-.27),Y(cz+.42*d)); ctx.lineTo(X(cx+.27),Y(cz+.42*d)); ctx.moveTo(X(cx-.2),Y(cz)); ctx.lineTo(X(cx-.25),Y(cz+.4*d)); ctx.moveTo(X(cx+.2),Y(cz)); ctx.lineTo(X(cx+.25),Y(cz+.4*d)); ctx.stroke();
+    ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(X(cx),Y(cz),.24*S,.13*S,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#F4F4F2'; ctx.beginPath(); ctx.arc(X(cx),Y(cz+.08*d),.11*S,0,Math.PI*2); ctx.fill(); ctx.stroke(); };
+  // a tree from above: one circle with a light fill and a hairline edge — the block's own trees in a pale green (full tone), the
+  // surrounding streets' in near-white (the context stays quiet); a dot for the trunk
+  const treeSym=(cx,cz,r,ctxTree)=>{ const px=X(cx), py=Y(cz), R=r*S; if(!ctxTree) shadow(cx,cz,r*.9,r*.9,.1);
+    ctx.fillStyle=ctxTree?'rgba(255,255,255,.55)':'rgba(205,228,190,.8)'; ctx.strokeStyle=ctxTree?'rgba(70,95,60,.5)':'rgba(55,85,50,.8)'; ctx.lineWidth=LWT.hair;
+    ctx.beginPath(); ctx.arc(px,py,R,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(60,50,40,.6)'; ctx.beginPath(); ctx.arc(px,py,.1*S,0,Math.PI*2); ctx.fill(); };
+  const tree=(cx,cz,h)=>treeSym(cx,cz,clamp((h||7)*.19,.6,2.4),false);
+  // a post or planter: a small open circle, not a black dot (the old solid dots overwhelmed the drawing when zoomed in)
+  const bollard=(cx,cz)=>{ ctx.strokeStyle=INK; ctx.lineWidth=LWT.hair; ctx.fillStyle='rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(X(cx),Y(cz),Math.max(LWT.med*2.5,.08*S),0,Math.PI*2); ctx.fill(); ctx.stroke(); };   /* v3: true size, with a floor that shrinks with the zoom (a fixed 1.2-unit floor grew to a 12 px disc at 10×) */
   sw.forEach(s=>{ const sd=s.side, t=S_.tr[sd]; if(!t||!t.n) return; const tx=sd==='L'?s.x+s.w*.75:s.x+s.w*.25; const sp=Math.max(6,t.sp); for(let z=(sd==='L'?3.1:7.4)%sp+ (ends[0]?5:0); z<LEN-3; z+=sp){ if(!inLaneAt(S_,sd,z)) tree(tx,z,t.h); } });
   // existing street trees on the surrounding streets (public-trees), flat and lighter so the context stays quiet
-  if (D.city) { S_.C.streets.forEach(st=>{ streetTrees(st, S_.C.streets).forEach(t=>{ if(nearStructure(S_.C,t.x,t.z)) return;   /* v3: no tree under or on a deck or ramp */ const r=clamp(t.h*.19,.6,2.4); ctx.fillStyle='rgba(140,170,120,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),r*S,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(70,95,60,.35)'; ctx.lineWidth=LWT.hair; ctx.stroke(); ctx.fillStyle='rgba(60,50,40,.45)'; ctx.beginPath(); ctx.arc(X(t.x),Y(t.z),.1*S,0,Math.PI*2); ctx.fill(); }); }); }
+  if (D.city) { S_.C.streets.forEach(st=>{ streetTrees(st, S_.C.streets).forEach(t=>{ if(nearStructure(S_.C,t.x,t.z)) return;   /* v3: no tree under or on a deck or ramp */ treeSym(t.x,t.z,clamp(t.h*.19,.6,2.4),true); }); }); }
   els.filter(e=>e.k==='buf'&&!/^(barrier|paint|raisedlane)$/.test(SEP[e.sep].bufKind)).forEach(bf=>{ for(let z=zp0+1.5;z<zp1-.5;z+=3){ if(!inLaneAt(S_,bf.side,z)) bollard(bf.x+bf.w/2,z); } });
   park.forEach(pk=>{ const cx=pk.x+pk.w/2; for(let z=z0m+3.5;z<z1m-2;z+=6.4){ if(!inLaneAt(S_,pk.side,z-2.2)&&!inLaneAt(S_,pk.side,z+2.2)&&R()<.7) car(cx,z,['#EEF0F2','#DCE1E6','#E6E9EC'][Math.floor(R()*3)]); } });
   const mv=(z,v)=>{ const span=z1m-z0m-8; return z0m+4+(((z-z0m-4)+v*S_.t)%span+span)%span; };
   travel.forEach((tl,i)=>{ const dir=tl.ow?(c.owd||1):(tl.side==='L'?-1:tl.side==='R'?1:0); if(!dir) return; for(let z=z0m+8+i*9;z<z1m-4;z+=28) car(tl.x+tl.w/2,mv(z,dir*c.spd/3.6*0.5),'#F2F3F4'); });   // right-hand traffic; one-way direction from OSM (else +z)
-  bikes.forEach((b,i)=>{ const cx=b.two?b.x+b.w*.25:b.x+b.w/2; for(let z=z0m+7+i*6;z<z1m-3;z+=22) cyc(cx,mv(z,5*(b.two?-1:b.dir)),['#E8574B','#3F6FB5'][i%2]); if(b.two) for(let z=z0m+14;z<z1m-3;z+=22) cyc(b.x+b.w*.75,mv(z,5),'#2FA6A0'); });
+  bikes.forEach((b,i)=>{ const cx=b.two?b.x+b.w*.25:b.x+b.w/2; for(let z=z0m+7+i*6;z<z1m-3;z+=22) cyc(cx,mv(z,5*(b.two?-1:b.dir)),['#E8574B','#3F6FB5'][i%2],b.two?-1:b.dir); if(b.two) for(let z=z0m+14;z<z1m-3;z+=22) cyc(b.x+b.w*.75,mv(z,5),'#2FA6A0',1); });
   sw.forEach((s,si)=>{ const px=s.x+s.w*(s.side==='L'?.4:.6); for(let z=2;z<LEN-1;z+=11){ const zz=((z+1.4*(si?1:-1)*S_.t)%(LEN-2)+(LEN-2))%(LEN-2)+1; if(!inLaneAt(S_,s.side,zz)) person(px+((z*7)%3-1)*.25,zz,['#E8574B','#3F6FB5','#2FA6A0','#E9B23A'][Math.floor(z/11+si)%4]); } });
   if(S_.drawOver) S_.drawOver();   // structures above the block go on top of the proposal (their shadow on it), under the annotations
   // v2: once zoomed in past 1.5×, every element carries its name and width along the lane, repeated so one is always in view,

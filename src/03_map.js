@@ -68,7 +68,16 @@ function drawMap(){
   ctx.fillStyle='rgba(160,205,140,.55)';
   if(DATA.parkpoly&&DATA.parkpoly.length){ DATA.parkpoly.forEach(pk=>{ ctx.beginPath(); pk.r.forEach(ring=>{ ring.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.closePath(); }); ctx.fill('evenodd'); }); }
   else DATA.parks.forEach(([x,y,ha])=>{ if(ha<0.3) return; const [sx,sy]=W2S(x,y); const r=Math.sqrt(ha*1e4/Math.PI)*map.z; if(r<1.5) return; ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.fill(); });
-  ctx.strokeStyle='rgba(15,23,42,.35)'; ctx.setLineDash([6*devicePixelRatio,4*devicePixelRatio]); ctx.lineWidth=1*devicePixelRatio; DATA.boundary.forEach(l=>{ ctx.beginPath(); l.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.stroke(); }); ctx.setLineDash([]);
+  // v3: the city limit is drawn only where it runs over land (Pacific Spirit Park / UBC to the west, Boundary Road to the east), as a
+  // light dashed line; along the inlet and the river the shoreline itself is the edge, so no line is drawn there
+  // (drawn after the clip below, so the dashes are not cut in half by the clip edge)
+  // v3: a boundary piece is "on land" when points along it lie inside the land polygons (the City's land mass, which runs on over
+  // UBC and Pacific Spirit Park, or the regional land) and not in the Fraser's water. English Bay, Burrard Inlet and the river are
+  // not land, so the limit there is left to the shoreline. Sampled every ~20 m so a piece that just touches a beach is not kept.
+  if(!window.BND_LAND){ const L=[...(DATA.land||[]),...(DATA.landOut||[])], Wt=DATA.water||[];
+    const onLand=(x,y)=>L.some(r=>pointInRing(x,y,r)) && !Wt.some(r=>pointInRing(x,y,r));
+    const pieceOnLand=(a,b)=>{ const n=Math.max(2,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/20)); let k=0; for(let i=1;i<n;i++){ const t=i/n; if(onLand(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t)) k++; } return k/(n-1)>0.5; };
+    window.BND_LAND=DATA.boundary.map(l=>{ const runs=[]; let run=[]; for(let i=1;i<l.length;i++){ const a=l[i-1], b=l[i]; if(!pieceOnLand(a,b)){ if(run.length>1) runs.push(run); run=[]; } else { if(!run.length) run.push(a); run.push(b); } } if(run.length>1) runs.push(run); return runs; }).flat(); }
   if(typeof drawHeatLayer==='function') drawHeatLayer(ctx,W,H,dpr0);   // v3: bike-score heat map under the streets
   ctx.strokeStyle='#D3D6DA'; ctx.lineWidth=1.2*devicePixelRatio; DATA.nc.forEach(g=>{ ctx.beginPath(); g.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.stroke(); });
   const [wx0,wy1]=S2W(0,0),[wx1,wy0]=S2W(W,H); const vis=s=>s.g.some(([x,y])=>x>=wx0-300&&x<=wx1+300&&y>=wy0-300&&y<=wy1+300);
@@ -88,7 +97,8 @@ function drawMap(){
   // v3: proposals, bike infrastructure and cycling volumes over the existing network
   if(typeof drawProposalsLayer==='function'){ drawProposalsLayer(ctx,path,dpr,lod); drawInfraLayer(ctx,dpr,lod,wx0,wx1,wy0,wy1); drawVolumesLayer(ctx,dpr,lod); }
   ctx.restore();   // end of the boundary clip
-  if (BRING) { ctx.strokeStyle='rgba(15,23,42,.45)'; ctx.lineWidth=1.2*devicePixelRatio; ctx.beginPath(); BRING.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.closePath(); ctx.stroke(); }
+  // v3: the city limit as a light dashed line over land only (the old solid outline of the whole ring, water included, is gone)
+  if (window.BND_LAND) { ctx.strokeStyle='rgba(15,23,42,.35)'; ctx.setLineDash([5*devicePixelRatio,4*devicePixelRatio]); ctx.lineWidth=1*devicePixelRatio; window.BND_LAND.forEach(l=>{ ctx.beginPath(); l.forEach(([x,y],i)=>{ const [sx,sy]=W2S(x,y); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.stroke(); }); ctx.setLineDash([]); }
   if (map.hoverBW && map.hoverBW!==map.selBW) { ctx.strokeStyle='rgba(15,23,42,.55)'; ctx.lineWidth=6*dpr; path(map.hoverBW.g); ctx.stroke(); }
   if (map.selBW) { ctx.strokeStyle='#F59E0B'; ctx.lineWidth=8*dpr; path(map.selBW.g); ctx.stroke(); ctx.strokeStyle=BW_STYLE(map.selBW.t).c; ctx.lineWidth=3*dpr; path(map.selBW.g); ctx.stroke(); }
   if (map.hover && map.hover!==map.sel) { const off=!designable(map.hover).ok; ctx.strokeStyle=off?'rgba(120,128,138,.6)':'rgba(15,23,42,.55)'; ctx.lineWidth=5*dpr; ctx.setLineDash(off?[6*dpr,4*dpr]:[]); path(map.hover.g); ctx.stroke(); ctx.setLineDash([]); }

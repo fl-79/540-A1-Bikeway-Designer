@@ -1,28 +1,35 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // 3D — Three.js, all objects closed solids; orthographic isometric + orbit
 // ═══════════════════════════════════════════════════════════════════════════
-const T3 = { renderer:null, scene:null, cam:null, groups:{}, movers:[], labels:[], az:-Math.PI/4, el:Math.atan(1/Math.sqrt(2)), dist:400, zoom:1, target:null, raf:null, animating:false, last:0, extent:{w:40,len:100} };
+const T3 = { renderer:null, scene:null, cam:null, groups:{}, movers:[], labels:[], az:-Math.PI/4, el:Math.atan(1/Math.sqrt(2)), dist:400, zoom:0.7, target:null,   /* v3: the default view takes in the block and its neighbours (0.7), not the block alone */ raf:null, animating:false, last:0, extent:{w:40,len:100} };
 const MAT = (c,o={}) => new THREE.MeshLambertMaterial({color:c, ...o});
 // crisp edges on building volumes so massing stays legible at any zoom
-const EDGE  = new THREE.LineBasicMaterial({color:0x4b5563, transparent:true, opacity:0.75});
-const EDGE2 = new THREE.LineBasicMaterial({color:0x64748b, transparent:true, opacity:0.45});
+// v3 illustration style: the line carries the form. Buildings get a dark edge (the proposal's neighbours a little heavier than
+// the rest of the city); rounded things (figures, wheels, canopies) get an inverted-hull outline (hull); curb lines read as lines
+const EDGE  = new THREE.LineBasicMaterial({color:0x3f4650, transparent:true, opacity:0.9});
+const EDGE2 = new THREE.LineBasicMaterial({color:0x4b5563, transparent:true, opacity:0.6});
 function outline(mesh, g, mat){ const e=new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 15), mat||EDGE);
   e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.scale.copy(mesh.scale); g.add(e); return e; }
+const HULL=new THREE.MeshBasicMaterial({color:0x2b3340, side:THREE.BackSide});
+function hull(m,g,k){ const h=new THREE.Mesh(m.geometry,HULL); h.position.copy(m.position); h.rotation.copy(m.rotation); h.scale.copy(m.scale).multiplyScalar(k||1.07); (g||m.parent).add(h); return h; }
+function tube(g,a,b,r,mat){ const d=new THREE.Vector3(b[0]-a[0],b[1]-a[1],b[2]-a[2]); const L=d.length()||0.01; const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,L,8),mat); m.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); g.add(m); return m; }
+const JOINT=new THREE.LineBasicMaterial({color:0x8d8f8a, transparent:true, opacity:0.3});   // paver joints on the proposal's sidewalks
 // one pavement grey for the block and its surroundings (as in the plan), so junctions and continuations have no colour seam
-const M = { asphalt:MAT(0x6e737a), bike:MAT(0x3fb06e), bikeX:MAT(0x5fbf84), sw:MAT(0xe6e2d8), buf:MAT(0xc2cbd1), curb:MAT(0xb4bec5), barrier:MAT(0xb8bfc4), park:MAT(0x656a71), grass:MAT(0x9fd08c), yard:MAT(0xd9d6cd), bld:MAT(0xEBE9E3), bldNoH:MAT(0xE4D9C6), glass:MAT(0xa9c4d6), white:MAT(0xffffff), yellow:MAT(0xffd400), amber:MAT(0xf5a623), trunk:MAT(0x8c6a4a), leaf:MAT(0x68be6e), leaf2:MAT(0x4c9e5a), skin:MAT(0xf2c9a8), dark:MAT(0x2a3242), post:MAT(0xffffff), ctxSw:MAT(0xE9E7E1), ctxRd:MAT(0x9fa4a9), ctxBk:MAT(0x8F9693), steel:MAT(0x3a424e), signal:MAT(0x2f3b45) };
+// v3: the bike lane green is the plan's (rgba(96,150,110,.45) over the #A9ABA9 pavement = #88A28E), so the two views match
+const M = { asphalt:MAT(0x6e737a), bike:MAT(0x88a28e), bikeX:MAT(0x9bb3a2), sw:MAT(0xe6e2d8), buf:MAT(0xc2cbd1), curb:MAT(0x5f6670), barrier:MAT(0xb8bfc4), park:MAT(0x656a71), grass:MAT(0x9fd08c), yard:MAT(0xd9d6cd), bld:MAT(0xF5F3EE), bldNoH:MAT(0xE4D9C6), glass:MAT(0xa9c4d6), white:MAT(0xffffff), yellow:MAT(0xffd400), amber:MAT(0xf5a623), trunk:MAT(0x8c6a4a), leaf:MAT(0x68be6e), leaf2:MAT(0x4c9e5a), leafF:MAT(0x72c278,{flatShading:true}), leaf2F:MAT(0x56a862,{flatShading:true}), skin:MAT(0xf2c9a8), dark:MAT(0x2a3242), red:MAT(0xd9322b), post:MAT(0xffffff), ctxSw:MAT(0xE9E7E1), ctxRd:MAT(0x9fa4a9), ctxBk:MAT(0x8F9693), steel:MAT(0x3a424e), signal:MAT(0x2f3b45) };
 const PEOPLE=[0xe8574b,0x3f6fb5,0x2fa6a0,0xe9b23a,0x8c5fb5].map(c=>MAT(c)); const CARS=[0xf2f3f4,0xdce1e6,0xc9d0d6,0xeef0f2].map(c=>MAT(c));
 // the existing streets use the same materials as the proposal, faded toward white, so the block reads as the one thing in full tone
 const lighten=(hex,t)=>{ const f=v=>Math.round(v+(255-v)*t); return (f((hex>>16)&255)<<16)|(f((hex>>8)&255)<<8)|f(hex&255); };
-const FADE=0.22;   // existing streets: same asphalt, a little lighter; the proposal is the full tone
-M.ctxRd=MAT(lighten(0x6e737a,FADE)); M.ctxSw=MAT(lighten(0xe6e2d8,FADE)); M.ctxCurb=MAT(lighten(0xb4bec5,FADE)); M.ctxBuf=MAT(lighten(0xc2cbd1,FADE)); M.ctxPost=MAT(lighten(0x3a424e,FADE));
-M.ctxTrunk=MAT(lighten(0x8c6a4a,FADE)); M.ctxLeaf=MAT(lighten(0x68be6e,FADE));
+const FADE=0.3;   // existing streets: same asphalt, lighter; the proposal is the full tone (v3: a little more fade, the context recedes)
+M.ctxRd=MAT(lighten(0x6e737a,FADE)); M.ctxSw=MAT(lighten(0xe6e2d8,FADE)); M.ctxCurb=MAT(0x8e949b); M.ctxBuf=MAT(lighten(0xc2cbd1,FADE)); M.ctxPost=MAT(lighten(0x3a424e,FADE));   /* the context curb stays a visible line */
+M.ctxTrunk=MAT(lighten(0x8c6a4a,FADE)); M.ctxLeaf=MAT(lighten(0x72c278,FADE),{flatShading:true});
 // Vertical datum shared by everything in 3D. Steps between stacked surfaces are ≥ 3 cm so a 16-bit depth buffer cannot
 // make them flicker: ground plate 0 · pavement top +0.03 · markings +0.06 · curb / sidewalk top +0.18.
 // The block's own pavement is also at +0.03 (its group is lifted so its element tops land there), so there is no level
 // change where the proposal meets the existing street, and its markings sit ~2.5 cm above its pavement.
 const Y={ground:0, road:0.03, walk:0.18, mark:0.06, block:0.05};   // block: lanes top at −0.01+0.05 = +0.04, 1 cm above the context pavement (+0.03) so the two never share a plane where a cross street's pavement runs on under the block's lanes (v3: that flicker was the "striped triangle"); sidewalk/buffer boxes (h .15) top at +0.17, 1 cm under the context curbs (+0.18)
 // flat pavement markings are merged into one mesh per colour (thousands of dashes would otherwise be thousands of draw calls)
-const MQ = { white:MAT(0xffffff,{side:THREE.DoubleSide}), yellow:MAT(0xffd400,{side:THREE.DoubleSide}), bike:MAT(0x5fae7d,{side:THREE.DoubleSide}), paint:MAT(0x9fc4aa,{side:THREE.DoubleSide}), shared:MAT(0x7f9a86,{side:THREE.DoubleSide}) };
+const MQ = { white:MAT(0xffffff,{side:THREE.DoubleSide}), yellow:MAT(0xffd400,{side:THREE.DoubleSide}), bike:MAT(0x88a28e,{side:THREE.DoubleSide}), paint:MAT(0x9fc4aa,{side:THREE.DoubleSide}), shared:MAT(0x7f9a86,{side:THREE.DoubleSide}) };
 // faded versions for the existing streets (lighten() is defined below MAT, so these are filled in lazily)
 const MQC = {};
 function mqc(k){ if(!MQC[k]) MQC[k]=MAT(lighten(MQ[k].color.getHex(),0.3),{side:THREE.DoubleSide}); return MQC[k]; }
@@ -53,11 +60,13 @@ function sph(r,mat,x,y,z,g){ const m=new THREE.Mesh(new THREE.SphereGeometry(r,1
 function init3D(){ if(T3.renderer) return; const c=$('c3d'); T3.renderer=new THREE.WebGLRenderer({canvas:c,antialias:true}); T3.renderer.setPixelRatio(devicePixelRatio); T3.renderer.shadowMap.enabled=true; T3.renderer.shadowMap.type=THREE.PCFSoftShadowMap; T3.renderer.setClearColor(0xfbfbf9,1);
   T3.scene=new THREE.Scene(); T3.scene.fog=new THREE.Fog(0xfbfbf9,500,1400);
   // hemisphere + sun kept near 1.2 total so pale context colours (terrain, sidewalks, water) do not clip to white
-  T3.scene.add(new THREE.HemisphereLight(0xffffff,0xbfc8d0,0.62)); const sun=new THREE.DirectionalLight(0xffffff,0.58); sun.position.set(-60,120,80); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0008; sun.shadow.normalBias=0.35; const sc=sun.shadow.camera; sc.left=-260; sc.right=260; sc.top=260; sc.bottom=-260; sc.near=1; sc.far=800; T3.scene.add(sun); T3.sun=sun;
+  // v3 illustration style: an almost flat light — the hemisphere carries the tone, the sun only adds a light, short shadow
+  // (a steep sun from the south-west) so faces read by their outline, not by shade; roof and wall are one tone
+  T3.scene.add(new THREE.HemisphereLight(0xffffff,0xeef0f2,0.98)); const sun=new THREE.DirectionalLight(0xffffff,0.22); sun.position.set(-50,170,70); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0008; sun.shadow.normalBias=0.35; sun.shadow.radius=4; const sc=sun.shadow.camera; sc.left=-260; sc.right=260; sc.top=260; sc.bottom=-260; sc.near=1; sc.far=800; T3.scene.add(sun); T3.sun=sun;
   T3.cam=new THREE.OrthographicCamera(-1,1,1,-1,1,1200);   // tight depth range: the model is ≤ 900 m deep from a 400 m camera, and precision matters for the stacked surfaces
   let drag=null; c.addEventListener('mousedown',e=>{drag=[e.clientX,e.clientY];}); window.addEventListener('mousemove',e=>{ if(!drag) return; T3.az-= (e.clientX-drag[0])*0.006; T3.el=clamp(T3.el+(e.clientY-drag[1])*0.005,0.08,1.5); drag=[e.clientX,e.clientY]; updateCam(); render3D(); }); window.addEventListener('mouseup',()=>drag=null);
   c.addEventListener('wheel',e=>{ e.preventDefault(); T3.zoom=clamp(T3.zoom*Math.exp(-e.deltaY*0.0012),0.18,12); updateCam(); render3D(); },{passive:false});   // zoom out far enough to see the whole site plate
-  c.addEventListener('dblclick',()=>{ T3.az=-Math.PI/4; T3.el=Math.atan(1/Math.sqrt(2)); T3.zoom=1; updateCam(); render3D(); }); }
+  c.addEventListener('dblclick',()=>{ T3.az=-Math.PI/4; T3.el=Math.atan(1/Math.sqrt(2)); T3.zoom=0.7; updateCam(); render3D(); }); }
 function updateCam(){ const c=$('c3d'); const W=c.clientWidth,H=c.clientHeight; const halves=(D.before&&!D.only)?2:1; const aspect=(W/halves)/H; const ext=T3.extent; const span=Math.max(ext.len*0.75, ext.w*1.6)/T3.zoom; T3.cam.left=-span*aspect/2; T3.cam.right=span*aspect/2; T3.cam.top=span/2; T3.cam.bottom=-span/2; T3.cam.updateProjectionMatrix();
   const t=T3.target; T3.cam.position.set(t.x+T3.dist*Math.cos(T3.el)*Math.sin(T3.az), t.y+T3.dist*Math.sin(T3.el), t.z+T3.dist*Math.cos(T3.el)*Math.cos(T3.az)); T3.cam.lookAt(t); scaleLabels(); }
 function render3D(){ const r=T3.renderer, c=$('c3d'); const W=c.clientWidth*devicePixelRatio, H=c.clientHeight*devicePixelRatio; if(c.width!==W||c.height!==H){ r.setSize(c.clientWidth,c.clientHeight,false); }
@@ -247,12 +256,13 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
       else strip(cg, el.w, M.ctxBuf, Y.walk, Math.max(0.05,el.h||0.15)); }); });
     ribbon.target=null; QB.mesh(pg); QW.mesh(pg); g.add(pg); T3.propCtx=pg; }
   { const trees=[]; C.streets.forEach(st=>{ if(!inR(st.g)) return; streetTrees(st, C.streets).forEach(t=>{ if(inBox(t.x,t.z)&&!nearStructure(C,t.x,t.z)) trees.push(t); }); });   // v3: no tree under or on a deck or ramp
-    if(trees.length){ const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5,0.5,1,8),M.ctxTrunk,trees.length), crown=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,8),M.ctxLeaf,trees.length);
+    // v3 illustration style: a faceted canopy (low-poly, flat shaded) with a dark inverted-hull outline, slightly flattened
+    if(trees.length){ const cg=new THREE.IcosahedronGeometry(1,1); const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5,0.5,1,8),M.ctxTrunk,trees.length), crown=new THREE.InstancedMesh(cg,M.ctxLeaf,trees.length), rim=new THREE.InstancedMesh(cg,HULL,trees.length);
       const mtx=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(), s=new THREE.Vector3();
       trees.forEach((t,i)=>{ const H=clamp(t.h,3,18), r=clamp(H*0.19,0.6,2.4), tw=clamp(t.d/100,0.12,0.5), y0=ez(t.x,t.z)+Y.walk;
         p.set(t.x,y0+H*0.275,t.z); s.set(tw,H*0.55,tw); mtx.compose(p,q,s); trunk.setMatrixAt(i,mtx);
-        p.set(t.x,y0+H*0.55+r*0.6,t.z); s.set(r,r,r); mtx.compose(p,q,s); crown.setMatrixAt(i,mtx); });
-      trunk.castShadow=crown.castShadow=true; g.add(trunk); g.add(crown); } }
+        p.set(t.x,y0+H*0.55+r*0.55,t.z); s.set(r,r*0.85,r); mtx.compose(p,q,s); crown.setMatrixAt(i,mtx); s.set(r*1.05,r*0.85*1.05,r*1.05); mtx.compose(p,q,s); rim.setMatrixAt(i,mtx); });
+      trunk.castShadow=crown.castShadow=true; g.add(trunk); g.add(crown); g.add(rim); } }
   // signal head at junctions where Open Data has a traffic signal
   C.nodes.forEach(nd=>{ const r=Math.max(6,(nd.row-7.2)/2); if(!inBox(nd.x,nd.z)) return;
     if(nd.sig){ const x=nd.x+r+0.8, z=nd.z+r+0.8, y=ez(x,z)+Y.walk; cyl(0.08,4.6,M.ctxPost,x,y,z,g,10); box(0.3,0.9,0.3,M.signal,x-0.15,y+3.6,z-0.15,g); box(0.12,0.12,0.02,MAT(0xff3b30),x-0.06,y+4.3,z-0.17,g); box(0.12,0.12,0.02,MAT(0x34c759),x-0.06,y+3.8,z-0.17,g); } });
@@ -309,6 +319,8 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
       // (at a T-junction the side with no cross-street leg keeps its sidewalk running to the node, with no corner)
       const rr = e.k==='sw' ? (()=>{ let z=noLeg(0,sd)?0:(EI[0].type==='cross'?za:0); const zE=noLeg(1,sd)?LEN:(EI[1].type==='cross'?zb:LEN);   /* the corner slab (below) takes over at a cross street */ const o=[]; gaps(sd).forEach(([a,b])=>{ if(a-z>0.05) o.push([z,a]); z=b; }); if(zE-z>0.05) o.push([z,zE]); return o; })() : runs(sd,za,zb);
       rr.forEach(([a,b])=>box(e.w,h+0.02,b-a,mat,e.x,-0.05,a,g)); gaps(sd).forEach(([a,b])=>box(e.w,0.04,b-a,M.asphalt,e.x,-0.05,a,g));
+      // v3 illustration style: paver joints across the proposal's sidewalks every metre — the one texture in the view, and only here
+      if(e.k==='sw'&&!S_.host){ const pts=[]; const top=h-0.03+0.004; rr.forEach(([a,b])=>{ for(let z=Math.ceil(a)+0.5;z<b-0.2;z+=1.0) pts.push(e.x+0.05,top,z, e.x+e.w-0.05,top,z); }); if(pts.length){ const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3)); g.add(new THREE.LineSegments(lg,JOINT)); } }
       if (e.k==='buf'){ const kind=SEP[e.sep].bufKind;
         if (kind==='barrier'){ runs(sd,za,zb).forEach(([a,b])=>{ for(let z=Math.max(a,zp0);z<Math.min(b,zp1)-0.1;z+=3){ const d=Math.min(3,Math.min(b,zp1)-z); const bm=box(0.56,0.69,d-0.05,M.barrier,e.x+(e.w-0.56)/2,0,z,g); if(Math.floor(z/3)%2===0) box(0.58,0.12,d-0.05,M.amber,e.x+(e.w-0.58)/2,0.45,z,g); } }); }
         else if (kind==='painted'){ for(let z=1.5;z<LEN-1;z+=3){ if(inLaneAt(S_,sd,z)||!protOK(z)) continue; cyl(0.05,0.95,M.post,e.x+e.w/2,0,z,g,10); box(0.11,0.18,0.11,M.bike,e.x+e.w/2-0.055,0.5,z-0.055,g); } for(let z=0.5;z<LEN;z+=1.2){ if(!protOK(z)) continue; box(e.w-0.1,0.01,0.12,M.white,e.x+0.05,h+0.001,z,g); } }
@@ -408,10 +420,46 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
   park.forEach(pk=>{ for(let z=z0m+3;z<z1m-3;z+=6.6){ if(inLaneAt(S_,pk.side,z-2.2)||inLaneAt(S_,pk.side,z+2.2)) continue; if(((z*13)%7)<4.5) car3(g,pk.x+pk.w/2,z,1,CARS[Math.floor(z)%4]); } });
   g.visible=!before; return g; }
 
-function tree3(g,x,z,h,dcm,y0){ const H=clamp(h,3,18), r=clamp(H*0.19,0.6,2.4), tw=clamp(dcm/100,0.12,0.5); cyl(tw/2,H*0.55,M.trunk,x,y0,z,g,10); sph(r,M.leaf,x,y0+H*0.55+r*0.6,z,g); sph(r*0.7,M.leaf2,x+r*0.45,y0+H*0.55+r*0.35,z-r*0.3,g); sph(r*0.6,M.leaf,x-r*0.4,y0+H*0.55+r*0.9,z+r*0.35,g); }
-function person3(g,x,z,mat){ const p=new THREE.Group(); const b=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.2,0.9,10),mat); b.position.y=0.45+0.7; b.castShadow=true; p.add(b); const legs=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,0.7,10),M.dark); legs.position.y=0.35; p.add(legs); const hd=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,8),M.skin); hd.position.y=1.78; p.add(hd); p.position.set(x,0.15,z); g.add(p); return p; }
-function cyclist3(g,x,z,dir,mat){ const p=new THREE.Group(); [ -0.5,0.5 ].forEach(dz=>{ const w=new THREE.Mesh(new THREE.TorusGeometry(0.32,0.03,8,20),M.dark); w.position.set(0,0.34,dz); w.rotation.y=Math.PI/2; p.add(w); }); const fr=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.5,1.0),M.steel); fr.position.set(0,0.6,0); p.add(fr); const bd=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.18,0.6,10),mat); bd.position.set(0,1.15,-0.1*dir); bd.rotation.x=0.45*dir; p.add(bd); const hd=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,8),M.skin); hd.position.set(0,1.55,0.1*dir); p.add(hd); const hm=new THREE.Mesh(new THREE.SphereGeometry(0.16,10,6,0,Math.PI*2,0,Math.PI/2),M.white); hm.position.copy(hd.position); p.add(hm); p.position.set(x,0.02,z); p.traverse(o=>{o.castShadow=true;}); g.add(p); return p; }
-function car3(g,x,z,dir,mat){ const p=new THREE.Group(); const body=new THREE.Mesh(new THREE.BoxGeometry(1.75,0.6,4.2),mat); body.position.y=0.55; p.add(body); const cab=new THREE.Mesh(new THREE.BoxGeometry(1.45,0.5,2.1),M.glass); cab.position.set(0,1.1,-0.2); p.add(cab); [[-0.78,1.4],[0.78,1.4],[-0.78,-1.4],[0.78,-1.4]].forEach(([dx,dz])=>{ const w=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,0.22,12),M.dark); w.rotation.z=Math.PI/2; w.position.set(dx,0.3,dz); p.add(w); }); p.position.set(x,0.02,z); p.traverse(o=>{o.castShadow=true;}); g.add(p); return p; }
+// ── v3 illustration style: figures as small articulated toon models — flat colour, a dark outline (hull), one light shadow ──
+// a tree: trunk and two faceted canopy lobes (flat-shaded icosahedra, the larger one flattened), each with a hull outline
+function tree3(g,x,z,h,dcm,y0){ const H=clamp(h,3,18), r=clamp(H*0.19,0.6,2.4), tw=clamp(dcm/100,0.12,0.5); cyl(tw/2,H*0.55,M.trunk,x,y0,z,g,8);
+  const c1=new THREE.Mesh(new THREE.IcosahedronGeometry(r,1),M.leafF); c1.position.set(x,y0+H*0.55+r*0.55,z); c1.scale.set(1,0.85,1); c1.castShadow=true; g.add(c1); hull(c1,g,1.05);
+  const c2=new THREE.Mesh(new THREE.IcosahedronGeometry(r*0.62,1),M.leaf2F); c2.position.set(x+r*0.35,y0+H*0.55+r*1.05,z-r*0.25); c2.castShadow=true; g.add(c2); hull(c2,g,1.06); }
+// a person: head with hair, shoulders, torso, two arms, two legs; the movers carry the whole group
+function person3(g,x,z,mat){ const p=new THREE.Group();
+  const torso=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.19,0.56,10),mat); torso.position.y=1.1; torso.castShadow=true; p.add(torso); hull(torso,p,1.1);
+  const sh=new THREE.Mesh(new THREE.SphereGeometry(0.17,10,8),mat); sh.position.y=1.37; sh.scale.set(1,0.5,1); p.add(sh); hull(sh,p,1.1);
+  [-0.09,0.09].forEach(dx=>{ const l=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.065,0.8,8),M.dark); l.position.set(dx,0.42,0); p.add(l); hull(l,p,1.14); });
+  [-0.25,0.25].forEach(dx=>{ const a=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.045,0.5,8),mat); a.position.set(dx,1.08,0.02); a.rotation.z=dx<0?0.14:-0.14; p.add(a); hull(a,p,1.16); });
+  const hd=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,8),M.skin); hd.position.y=1.64; p.add(hd); hull(hd,p,1.1);
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.145,10,8,0,Math.PI*2,0,Math.PI/2),M.dark); hair.position.y=1.66; p.add(hair);
+  p.position.set(x,0.02,z); g.add(p); return p; }
+// a cyclist: two spoked wheels, a diamond frame, bars and saddle, a rider leaning to the bars with legs on the pedals and a helmet;
+// built nose towards +z and turned round for dir < 0
+function cyclist3(g,x,z,dir,mat){ const p=new THREE.Group();
+  [0.52,-0.52].forEach(dz=>{ const w=new THREE.Mesh(new THREE.TorusGeometry(0.33,0.035,8,24),M.dark); w.position.set(0,0.35,dz); w.rotation.y=Math.PI/2; p.add(w); hull(w,p,1.06);
+    [0,Math.PI/3,2*Math.PI/3].forEach(a=>{ const s=new THREE.Mesh(new THREE.BoxGeometry(0.015,0.62,0.015),M.steel); s.position.set(0,0.35,dz); s.rotation.x=a; p.add(s); }); });
+  const F=[[0,0.92,0.33],[0,0.96,-0.22],[0,0.42,-0.08],[0,0.35,-0.52],[0,0.35,0.52]];   // head tube, seat, bottom bracket, rear axle, front axle
+  [[0,1],[0,2],[1,2],[2,3],[1,3],[0,4]].forEach(([a,b])=>tube(p,F[a],F[b],0.025,M.steel));
+  box(0.46,0.03,0.03,M.steel,-0.23,0.98,0.34,p); box(0.12,0.05,0.26,M.dark,-0.06,0.96,-0.34,p);   // handlebar, saddle
+  const torso=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.16,0.55,10),mat); torso.position.set(0,1.22,0); torso.rotation.x=0.55; torso.castShadow=true; p.add(torso); hull(torso,p,1.1);
+  [-0.1,0.1].forEach((dx,k)=>{ tube(p,[dx,0.98,-0.2],[dx,0.55+(k?0.12:-0.12),-0.08+(k?0.16:-0.16)],0.05,M.dark); tube(p,[dx*2.2,1.38,0.12],[dx*2,1.0,0.33],0.04,mat); });   // legs to the pedals, arms to the bars
+  const hd=new THREE.Mesh(new THREE.SphereGeometry(0.13,10,8),M.skin); hd.position.set(0,1.56,0.22); p.add(hd); hull(hd,p,1.1);
+  const hm=new THREE.Mesh(new THREE.SphereGeometry(0.15,10,6,0,Math.PI*2,0,Math.PI/2),M.white); hm.position.copy(hd.position); hm.position.y+=0.02; p.add(hm);
+  p.position.set(x,0.02,z); p.rotation.y=dir>0?0:Math.PI; g.add(p); return p; }
+// a car: an extruded side profile (low hood, cabin, tail) with a glass band, hubbed wheels, head and tail lights, an edge outline;
+// built nose towards −z and turned round for dir > 0
+function car3(g,x,z,dir,mat){ const p=new THREE.Group();
+  const prof=[[-2.1,0.32],[-2.1,0.8],[-1.4,0.86],[-0.72,1.38],[0.72,1.42],[1.3,0.92],[2.1,0.82],[2.1,0.32]];
+  const body=new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape(prof.map(([a,b])=>new THREE.Vector2(a,b))),{depth:1.72,bevelEnabled:false}),mat); body.rotation.y=Math.PI/2; body.position.x=-0.86; body.castShadow=true; p.add(body); outline(body,p,EDGE);
+  const gl=[[-1.3,0.88],[-0.7,1.33],[0.7,1.37],[1.22,0.92]]; const glass=new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape(gl.map(([a,b])=>new THREE.Vector2(a,b))),{depth:1.76,bevelEnabled:false}),M.glass); glass.rotation.y=Math.PI/2; glass.position.x=-0.88; p.add(glass);
+  [[-0.78,1.35],[0.78,1.35],[-0.78,-1.35],[0.78,-1.35]].forEach(([dx,dz])=>{ const w=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.22,14),M.dark); w.rotation.z=Math.PI/2; w.position.set(dx,0.32,dz); p.add(w); hull(w,p,1.08); const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,0.24,10),M.curb); cap.rotation.z=Math.PI/2; cap.position.set(dx,0.32,dz); p.add(cap); });
+  [-0.55,0.55].forEach(dx=>{ box(0.3,0.12,0.06,M.white,dx-0.15,0.6,-2.13,p); box(0.26,0.1,0.05,M.red,dx-0.13,0.62,2.09,p); });
+  // v3: a little more articulation — bumpers, mirrors, door seams and a sill line on each side (lines, not geometry)
+  box(1.6,0.14,0.08,M.curb,-0.8,0.36,-2.16,p); box(1.6,0.14,0.08,M.curb,-0.8,0.36,2.08,p);
+  [-0.86,0.86].forEach(sx=>box(0.12,0.08,0.2,mat,sx<0?sx-0.1:sx-0.02,0.98,-0.6,p));
+  { const sp=[]; [-0.865,0.865].forEach(sx=>{ sp.push(sx,0.36,-0.05, sx,1.3,-0.05, sx,0.36,1.1, sx,1.22,1.1, sx,0.38,-1.9, sx,0.38,1.9); }); const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3)); p.add(new THREE.LineSegments(lg,EDGE)); }
+  p.position.set(x,0.02,z); p.rotation.y=dir>0?Math.PI:0; g.add(p); return p; }
 
 function setAnim(on){ T3.animating=on&&D.view==='3d'; if(T3.animating&&!T3.raf){ T3.last=performance.now(); T3.raf=requestAnimationFrame(tick); } if(!T3.animating&&T3.raf){ cancelAnimationFrame(T3.raf); T3.raf=null; } if(D.view==='3d'&&T3.renderer) render3D(); }
 function tick(t){ if(!T3.animating){T3.raf=null;return;} const dt=Math.min(0.05,(t-T3.last)/1000); T3.last=t; T3.movers.forEach(m=>{ m.obj.position.z+=m.v*dt; if(m.obj.position.z>m.z1) m.obj.position.z=m.z0; if(m.obj.position.z<m.z0) m.obj.position.z=m.z1; }); render3D(); T3.raf=requestAnimationFrame(tick); }

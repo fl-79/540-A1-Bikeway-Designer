@@ -33,7 +33,7 @@ function setMode(m){
   if(m==='review'&&(!D.prop||!D.ctx)) m='design';   // nothing to review without a proposal on screen
   if(m==='review'){ const cen=reviewCentre(); if(cen!=null&&D.ctx&&cen!==D.ctx.seg.i){ D.pendingReview=true; D.prop.idx=D.prop.order.indexOf(cen); openDesign(SEGS[cen]); return; }
     CTX_EXCLUDE.clear(); D.prop.order.forEach(i=>{ if(i!==D.ctx.seg.i) CTX_EXCLUDE.add(i); }); D.plateHalf=reviewExtent(); CTX_CACHE.id=null; D.before=false; $('tg-before').classList.remove('on'); }
-  else if(CTX_EXCLUDE.size||D.plateHalf){ CTX_EXCLUDE.clear(); D.plateHalf=0; CTX_CACHE.id=null; T3.zoom=1; }
+  else if(CTX_EXCLUDE.size||D.plateHalf){ CTX_EXCLUDE.clear(); D.plateHalf=0; CTX_CACHE.id=null; T3.zoom=0.7; }
   D.mode=m; $('screen-design').dataset.mode=m; D.only=m==='verify'?'before':null; $('side').style.display=m==='review'?'none':'';
   if(m==='verify'){ D.before=true; $('tg-before').classList.add('on'); if(typeof toggleSide==='function') toggleSide(false); if(typeof showSV==='function') showSV(false); }
   else if(typeof toggleSide==='function') toggleSide(true);
