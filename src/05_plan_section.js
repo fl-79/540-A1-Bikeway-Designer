@@ -30,7 +30,9 @@ function dimString(ctx,canvas,v,dpr,k,fs,dimCol,S,X,x1,x2,y,label,i,DIMS){ ctx.f
 //   fillet   the curb return at the block curb x = curbX: a circle of radius r tangent to the block's curb line and to the cross
 //            street's actual curb line at whatever angle it meets; P corner point, C centre, TA / TB tangent points, arc(n) points
 function endGeom(S_,i,cXL,cXR){ const LEN=S_.LEN, zc=i?LEN:0, sgn=i?1:-1, zEdge=i?S_.ZB:S_.ZA, half=S_.half[i]; const e=S_.EI[i];
-  const ext=(e.segs||[]).map(o=>S_.C.streets.find(st=>st.s===o)).filter(Boolean).map(st=>{ const g=st.g; const atStart=Math.hypot(g[0][0],g[0][1]-zc)<Math.hypot(g[g.length-1][0],g[g.length-1][1]-zc); const run=(cXR-cXL)/2+1;
+  const ext=(e.segs||[]).map(o=>S_.C.streets.find(st=>st.s===o)).filter(Boolean).map(st=>{ const g=st.g; const atStart=Math.hypot(g[0][0],g[0][1]-zc)<Math.hypot(g[g.length-1][0],g[g.length-1][1]-zc);
+    const q0=atStart?g[0]:g[g.length-1], q1=atStart?g[1]:g[g.length-2]; const sinA=Math.abs(q1[0]-q0[0])/(Math.hypot(q1[0]-q0[0],q1[1]-q0[1])||1);   /* v3: a skewed street needs a longer run to reach the block's far curb */
+    const run=((cXR-cXL)/2+1)/Math.max(sinA,1/3);
     return {st, m:st.m, g:atStart?extendLine(g,run,0):extendLine(g,0,run)}; });
   const curbZ=x=>{ let best=null; ext.forEach(E=>{ const hs=[]; [E.m.ctc/2,-E.m.ctc/2].forEach(off=>zCross(offsetLine(E.g,off),x).forEach(h=>{ if(Math.abs(h.z-zc)<E.m.ctc+12) hs.push(h); })); if(hs.length<2) return;
     const near=hs.reduce((p,q)=>(sgn>0?q.z<p.z:q.z>p.z)?q:p), far=hs.reduce((p,q)=>(sgn>0?q.z>p.z:q.z<p.z)?q:p); if(!best||Math.abs(near.z-zc)<Math.abs(best.near.z-zc)) best={near,far}; }); return best; };
@@ -144,7 +146,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   const shadow=(cx,cz,rx,rz,a)=>{ctx.fillStyle=`rgba(30,30,30,${a*.6})`;ctx.beginPath();ctx.ellipse(X(cx)+S*.2,Y(cz)+S*.2,rx*S,rz*S,0,0,Math.PI*2);ctx.fill();};
   canvas._box=[X(sceneXL),Y(LEN),X(sceneXR),Y(0)];
   // building footprints (2015 layer) — drawn once, complete; the streets are painted over them so a footprint never shows on a road
-  const drawBlds=()=>{ ctx.strokeStyle='rgba(40,40,40,.55)'; ctx.lineWidth=LWT.light; S_.C.blds.forEach(b=>{ ctx.fillStyle=b.f?'#F0DFC2':'#EDEBE5'; ctx.beginPath(); b.p.forEach((q,i)=>{ i?ctx.lineTo(X(q[0]),Y(q[1])):ctx.moveTo(X(q[0]),Y(q[1])); }); ctx.closePath(); ctx.fill(); ctx.stroke(); }); };
+  const drawBlds=()=>{ ctx.strokeStyle='rgba(40,40,40,.55)'; ctx.lineWidth=LWT.light; S_.C.blds.forEach(b=>{ ctx.fillStyle='#EDEBE5';   /* v3: estimated heights stay flagged in the data, not coloured */ ctx.beginPath(); b.p.forEach((q,i)=>{ i?ctx.lineTo(X(q[0]),Y(q[1])):ctx.moveTo(X(q[0]),Y(q[1])); }); ctx.closePath(); ctx.fill(); ctx.stroke(); }); };
   const stroke=(g,w,col)=>{ if(g.length<2) return; ctx.strokeStyle=col; ctx.lineWidth=w; ctx.beginPath(); g.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); };
   const poly=(g,w,col,dash)=>{ ctx.strokeStyle=col; ctx.lineWidth=Math.max(.8,w*S); ctx.setLineDash(dash?dash.map(d=>d*S):[]); ctx.beginPath(); g.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); ctx.setLineDash([]); };
   // path drawing language — NOT a protected lane: a paved path with hairline edges and a dashed centreline (two-way), a faint
@@ -156,7 +158,12 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   // a turnaround loop (closed OSM ring = the loop road's centreline): planted central island, the ring road, curbs both sides
   const drawLoop=(ring,w,rec)=>{ if(ring.length<4) return; const path=g=>{ ctx.beginPath(); g.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.closePath(); };
     // a cul-de-sac bulb (OSM turning_circle) is one paved disc with a curb round it — no ring road, no island
-    if(rec&&rec.bulb&&rec.hw==='turning_circle'){ ctx.fillStyle='#A9ABA9'; path(ring); ctx.fill(); ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.light; ctx.lineJoin='round'; path(ring); ctx.stroke(); return; }
+    if(rec&&rec.bulb&&rec.hw==='turning_circle'){ ctx.fillStyle='#A9ABA9'; path(ring); ctx.fill();
+      // v3: the curb round the bulb stops where a street enters it (the block itself, or a context street), so the carriageway runs
+      // into the bulb as one surface instead of a curb line cutting across the entry
+      const inRoad=p=>(p[0]>CL-0.3&&p[0]<CR+0.3&&p[1]>-3&&p[1]<LEN+3)||(S_.C&&S_.C.streets.some(st=>nearOnPoly(p,st.g)[0]<st.m.ctc/2+0.3));
+      ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.light; ctx.lineJoin='round'; const R=[...ring,ring[0]]; let open=false; ctx.beginPath();
+      for(let i=1;i<R.length;i++){ const a=R[i-1], b=R[i]; const mid=[(a[0]+b[0])/2,(a[1]+b[1])/2]; if(inRoad(mid)){ open=false; continue; } if(!open){ ctx.moveTo(X(a[0]),Y(a[1])); open=true; } ctx.lineTo(X(b[0]),Y(b[1])); } ctx.stroke(); return; }
     ctx.fillStyle='#D6DDC6'; path(ring); ctx.fill();
     ctx.strokeStyle='#A9ABA9'; ctx.lineWidth=w*S; ctx.lineJoin='round'; path(ring); ctx.stroke();
     ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.light; [-w/2,w/2].forEach(off=>{ const o=offsetLine([...ring,ring[1]],off).slice(0,ring.length); path(o); ctx.stroke(); }); };
@@ -186,7 +193,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     // a polyline with the pieces inside other structures removed (sampled every 1.5 m): lines of one deck never run across another
     const dropInside=(g,isIn)=>{ if(g.length<2) return []; const pts=[g[0],...alongLine(g,1.5,0.75).map(q=>[q[0],q[1]]),g[g.length-1]]; const runs=[]; let run=[]; pts.forEach(p=>{ if(isIn(p)){ if(run.length>1) runs.push(run); run=[]; } else run.push(p); }); if(run.length>1) runs.push(run); return runs; };
     const drawStreets=(list,up)=>{
-      list.forEach(st=>{ st._band=trimLine(st.g,st.trim[0],st.trim[1]); st._pav=extendLine(st.g,st.trim[0],st.trim[1]); });
+      list.forEach(st=>{ st._band=trimLine(st.g,st.trim[0],st.trim[1]); st._pav=extendLine(st.g,(st.ext||st.trim)[0],(st.ext||st.trim)[1]); });   /* v3: pavement to the crossing street's far curb (ext) */
       // structures at one level are one surface: a point inside another (wider) deck's carriageway, or inside the block's own
       // deck when the block is elevated, gets no line and no marking from this street — a ramp's edges start where it leaves the deck
       // edges: inside ANY other structure at this level → no line, so what remains is the outline of the union — a ramp's edge
@@ -227,7 +234,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
       Object.values(acc).forEach(({mk,runs})=>joinRuns(runs,1.2).forEach(r=>poly(r, mk.w, colOf(mk.kind), mk.dash)));
       // curb and property lines (a structure's edges read darker; a deck's outer line is its parapet), stopping at a crossing
       // street only on the side it leaves from (per-side trims); on decks, only outside every other structure
-      list.forEach(st=>{ if(hosted(st)) return; const bw=bandW(st); [st.m.ctc/2, -st.m.ctc/2, bw/2, -bw/2].forEach((off,k)=>{ const sd=off>0?'R':'L'; const g=up?st._pav:trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(g.length<2) return;
+      list.forEach(st=>{ if(hosted(st)) return; const bw=bandW(st); [st.m.ctc/2, -st.m.ctc/2, bw/2, -bw/2].forEach((off,k)=>{ const sd=off>0?'R':'L'; const te=i=>st.edge?st.edge[i][sd][k<2?'in':'out']:st.trimLR[i][sd];   /* v3: each line stops where IT clears the crossing carriageway (skew) */ const g=up?st._pav:trimLine(st.g, te(0), te(1)); if(g.length<2) return;
         ctx.strokeStyle = k<2 ? 'rgba(40,40,40,.6)' : (up?'rgba(40,40,40,.8)':'rgba(40,40,40,.3)'); ctx.lineWidth = k<2 ? (up?LWT.med:LWT.light) : (up?LWT.med:LWT.hair);
         const og=tapered(st) ? (k<2?st.E.pav:st.E.band)[sd] : offsetLine(g,off);   // v3: a merging ramp's edges are its tapered edges
         (up?dropInside(og,p=>inOtherEdge(st,p)):[og]).forEach(r=>{ ctx.beginPath(); r.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.stroke(); }); }); }); };
@@ -308,6 +315,11 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
   els.forEach(e=>{ if(e.k==='travel'||e.k==='park'||e.k==='sw') return; ctx.beginPath(); ctx.moveTo(X(e.x),Y(ZA)); ctx.lineTo(X(e.x),Y(ZB)); ctx.moveTo(X(e.x+e.w),Y(ZA)); ctx.lineTo(X(e.x+e.w),Y(ZB)); ctx.stroke(); });
   // markings
   const white='rgba(255,255,255,.92)'; const sw=els.filter(e=>e.k==='sw'); const cXL=sw[0].x+sw[0].w, cXR=sw[1].x;
+  // v3: the cross streets' real curb lines at each end (shared with the 3D view). Where a skewed cross street's curb cuts into the
+  // block short of its square section end, the block's elements stop at that curb: the wedge is painted back to pavement
+  const GE=EI.map((e,i)=>e.type==='cross'?endGeom(S_,i,cXL,cXR):null);
+  GE.forEach((G,i)=>{ if(!G||S_.host) return; const sgn=i?1:-1, zEdge=i?ZB:ZA; const cr=z=>sgn>0?Math.min(z,zEdge):Math.max(z,zEdge); const z0=cr(G.fb(cXL).near.z), z1=cr(G.fb(cXR).near.z); if(Math.abs(z0-zEdge)<0.05&&Math.abs(z1-zEdge)<0.05) return;
+    ctx.fillStyle='#A9ABA9'; ctx.beginPath(); ctx.moveTo(X(cXL),Y(zEdge)); ctx.lineTo(X(cXR),Y(zEdge)); ctx.lineTo(X(cXR),Y(z1)); ctx.lineTo(X(cXL),Y(z0)); ctx.closePath(); ctx.fill(); });
   const travel=els.filter(e=>e.k==='travel'), park=els.filter(e=>e.k==='park'), bikes=els.filter(e=>e.k==='bike');
   const ends=[S_.cw[0]?1:0, S_.cw[1]?1:0]; const EL=[endLayout(!!S_.cw[0]), endLayout(!!S_.cw[1])];
   // motor-vehicle markings start behind the vehicle stop bar, bike markings behind the bicycle stop bar (EDM §8.9.1.8)
@@ -372,8 +384,9 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
       // v2: the junction is built from the cross street's real (smoothed) geometry, not a right-angled rectangle, so a curving or
       // skewed cross street (Pacific Blvd at 0 Smithe) meets the block where its curbs actually are. Each cross street's
       // centreline runs on through the node to this block's far curb (its pavement crosses the block).
-      const G=endGeom(S_,i,cXL,cXR); const {ext,curbZ,fb}=G;   // shared with the 3D view
+      const G=GE[i]; const {ext,curbZ,fb}=G;   // shared with the 3D view
       // the block's sidewalks run on to the cross street's near curb (a skewed street leaves a wedge), or are cut back where it intrudes
+      // (the cross street's own sidewalk band lies on this side of that curb too, so the two sidewalks meet whatever the angle)
       [[hasL,sw[0]],[hasR,sw[1]]].forEach(([has,sx])=>{ if(!has||S_.host) return; const x0=sx.x, x1=sx.x+sx.w, z0=fb(x0).near.z, z1=fb(x1).near.z;   // (no sidewalk corners over a host deck's lanes)
         const quad=(a,b,col)=>{ ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(X(x0),Y(zEdge)); ctx.lineTo(X(x1),Y(zEdge)); ctx.lineTo(X(x1),Y(b)); ctx.lineTo(X(x0),Y(a)); ctx.closePath(); ctx.fill(); };
         const cl=z=>sgn>0?Math.max(z,zEdge):Math.min(z,zEdge), cr=z=>sgn>0?Math.min(z,zEdge):Math.max(z,zEdge);
@@ -412,9 +425,8 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
           if(ANN){ ctx.fillStyle='rgba(30,38,48,.95)'; (twoX?[[l1,`600 ${fsX}px Inter`,-fsX*.7],[l2,`${fsX*.9}px Inter`,fsX*.7]]:[[l1,`600 ${fsX}px Inter`,0]]).forEach(([t,f,dy])=>{ ctx.font=f; ctx.fillText(t,lx,ly+dy); }); } } }
       // corner island in the buffer: physical protection ends 6 m back, the island noses toward the corner and doubles as the
       // pedestrian refuge where the crosswalk crosses the bike lane (BC Parkway Guide §4.5.2; EDM §8.9.1.12 "protected intersection treatments are preferred")
-      els.filter(bf=>bf.k==='buf').forEach(bf=>{ const zA2=zIn(el.isl1), zB2=zIn(el.isl0);
-        ctx.fillStyle='#CFCCC4'; ctx.beginPath(); ctx.moveTo(X(bf.x),Y(zA2)); ctx.lineTo(X(bf.x+bf.w),Y(zA2)); ctx.lineTo(X(bf.x+bf.w*.5),Y(zB2)); ctx.closePath(); ctx.fill();
-        ctx.strokeStyle='rgba(40,40,40,.6)'; ctx.lineWidth=LWT.med; ctx.stroke(); });
+      // v3: the island was drawn as a wedge tapering to a point at the corner, which read as a ramp; the buffer now simply ends at
+      // the setback (the posts, planters or curb stop there) and the sidewalk corner is the refuge
       // the bicycle crossing: across the full cross street, bounded by elephant's feet (0.5 m squares, 0.5 m gaps), green where the
       // cross street carries turning conflicts, one non-elongated bicycle stencil per cross-street lane (EDM §8.9.1.12, Table 8-19)
       { const xs=e.segs&&e.segs[0]; const xst=xs&&S_.C.streets.find(st=>st.s===xs); const green=crossingGreen(xs);

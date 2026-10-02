@@ -67,6 +67,15 @@ const BLD=(()=>{ const bin=atob(DATA.bldb); const n=bin.length; const u=new Uint
   while(o<n){ const cnt=dv.getUint8(o); const hb=dv.getUint8(o+1); o+=2; const p=new Array(cnt); let cx=0,cy=0;
     for(let k=0;k<cnt;k++){ const x=dv.getUint16(o,true), y=dv.getUint16(o+2,true); o+=4; p[k]=[x,y]; cx+=x; cy+=y; }
     out.push({p, x:cx/cnt, y:cy/cnt, h:hb&0x7f, f:!!(hb&0x80)}); }
+  // v3: de-spike. About 1,480 outlines carry a hairpin (a vertex where the outline turns back by more than 135° on an edge
+  // under 12 m) — a surveyed notch or a simplification artefact; extruded 10–20 m high these read as dark blade-like walls
+  // slicing across the street (1300 W 4th Ave). The hairpin vertex is dropped, repeatedly, until the outline has none.
+  const cosT=Math.cos(135*Math.PI/180);
+  out.forEach(b=>{ let p=b.p; for(let pass=0;pass<4&&p.length>3;pass++){ const n=p.length; const keep=[]; let drop=false;
+      for(let i=0;i<n;i++){ const a=p[(i-1+n)%n], c=p[i], d=p[(i+1)%n]; const v1=[c[0]-a[0],c[1]-a[1]], v2=[d[0]-c[0],d[1]-c[1]]; const l1=Math.hypot(v1[0],v1[1])||1e-9, l2=Math.hypot(v2[0],v2[1])||1e-9;
+        if(!drop && (v1[0]*v2[0]+v1[1]*v2[1])/(l1*l2)<cosT && Math.min(l1,l2)<12){ drop=true; continue; }   /* one hairpin per pass, so neighbours are re-judged */ keep.push(c); }
+      p=keep; if(!drop) break; }
+    b.p=p; });
   return out; })();
 // ── street-end index: which block ends meet at each node (12 m cells) ──
 const END_INDEX=new Map(); const endKey=p=>Math.round(p[0]/12)+','+Math.round(p[1]/12);
@@ -74,6 +83,13 @@ SEGS.forEach(s=>{ [s.g[0], s.g[s.g.length-1]].forEach((p,k)=>{ const key=endKey(
 const chord=s=>{ const a=s.g[0], b=s.g[s.g.length-1]; const L=Math.hypot(b[0]-a[0],b[1]-a[1])||1; return [(b[0]-a[0])/L,(b[1]-a[1])/L]; };
 // blocks meeting the end k of s within 14 m, split into crossing (angle > ~37°) and collinear continuations
 // A block of the same street is always a continuation, whatever the angle (curved streets); anything else within ~37° too.
+// v3: a cul-de-sac bulb only where a public street really dead-ends. OpenStreetMap's turning_circle nodes also sit at the ends of
+// laneways, service roads, private strata roads and parking aisles (and outside the city): of 262 in the bbox only 69 lie within
+// 14 m of a public-streets dead end, and a satellite check of samples agreed — so the others are dropped at boot.
+(function filterBulbs(){ if(!DATA.loops) return; const ends=[]; SEGS.forEach(s=>[0,1].forEach(k=>{ const nb=endNeighbours(s,k); if(!nb.cross.length&&!nb.cont.length) ends.push(s.g[k?s.g.length-1:0]); }));
+  const grid=new Map(); ends.forEach(p=>{ const key=Math.floor(p[0]/20)+','+Math.floor(p[1]/20); if(!grid.has(key)) grid.set(key,[]); grid.get(key).push(p); });
+  const before=DATA.loops.length; DATA.loops=DATA.loops.filter(l=>{ if(!l.bulb) return true; const c=l.g.reduce((a,p)=>[a[0]+p[0]/l.g.length,a[1]+p[1]/l.g.length],[0,0]); const cx=Math.floor(c[0]/20), cy=Math.floor(c[1]/20); for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++){ if((grid.get((cx+i)+','+(cy+j))||[]).some(p=>Math.hypot(p[0]-c[0],p[1]-c[1])<14)) return true; } return false; });
+  console.log('cul-de-sac bulbs kept at public-street dead ends:', DATA.loops.filter(l=>l.bulb).length, 'of', before-DATA.loops.filter(l=>!l.bulb).length); })();
 function endNeighbours(s,k){ const p=s.g[k?s.g.length-1:0]; const u=chord(s); const cross=[], cont=[]; const [cx,cy]=[Math.round(p[0]/12),Math.round(p[1]/12)];
   for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++){ (END_INDEX.get((cx+i)+','+(cy+j))||[]).forEach(e=>{ if(e.s===s) return; const q=e.s.g[e.k?e.s.g.length-1:0]; if(Math.hypot(q[0]-p[0],q[1]-p[1])>14) return; const v=chord(e.s); (e.s.s!==s.s && Math.abs(u[0]*v[0]+u[1]*v[1])<0.8?cross:cont).push(e.s); }); }
   return {cross, cont}; }
@@ -555,7 +571,12 @@ function clipPoly(g, B){ const out=[]; let cur=null;
 // 4.5 m from the centreline, a lane and a half), and none on a structure
 function streetTrees(st, streets){ const tr=st.s.tr; if(!tr||st.up||st.lvl>0) return []; const m=st.m; const out=[]; const band=trimLine(st.g, st.trim?st.trim[0]:0, st.trim?st.trim[1]:0); if(band.length<2) return out;
   const swW=Math.max(1.5,(st.row-m.ctc)/2); const half=Math.max(m.ctc/2, 4.5);
-  const onRoad=p=>(streets||[]).some(o=>o!==st && o.m && alongOnPoly(o.g,p)[0]<o.m.ctc/2+0.8);
+  // v3: no tree on any carriageway — another street's pavement INCLUDING its run across a junction (ext), the proposed block's own
+  // carriageway and its crossing areas, or a turnaround loop; a tree needs 1 m clear of every curb line
+  const blk=(typeof D!=='undefined'&&D.ctx&&D.ctx.seg)?D.ctx.seg:null; const loops=(CTX_CACHE.v&&CTX_CACHE.v.loops)||[];
+  const onRoad=p=>(streets||[]).some(o=>o!==st && o.m && nearOnPoly(p, (o.ext||o.trim)?extendLine(o.g,(o.ext||o.trim)[0],(o.ext||o.trim)[1]):o.g)[0]<o.m.ctc/2+1.0)
+    || (blk && Math.abs(p[0])<blk.ctc/2+1.0 && p[1]>-14 && p[1]<blk.len+14)
+    || loops.some(l=>l.g&&nearOnPoly(p,l.g)[0]<Math.max(5.5,(l.ln||1)*4.5)/2+1.0);
   ['L','R'].forEach(sd=>{ const t=tr[sd]; if(!t||!t.n) return; const sp=Math.max(6,t.sp||8); const off=(sd==='L'?-1:1)*(half+swW*0.3);
     alongLine(offsetLine(band,off), sp, sp/2).forEach(([x,z])=>{ if(!onRoad([x,z])) out.push({x,z,h:t.h||7,d:t.d||15}); }); });
   return out; }
@@ -684,8 +705,21 @@ function localFrame(s){ const P0=s.g[0], P1=s.g[s.g.length-1]; const dx=P1[0]-P0
 // the sidewalk / curb must stop short there (that street's half carriageway, ≥ 3 m); a side with no crossing street gets 0
 function endSides(o,k,cross){ const n=o.g.length, p=k?o.g[n-1]:o.g[0], q=k?o.g[n-2]:o.g[1]; let dx=k?p[0]-q[0]:q[0]-p[0], dy=k?p[1]-q[1]:q[1]-p[1]; const L=Math.hypot(dx,dy)||1; dx/=L; dy/=L;
   // bar: where the stop bar and lane lines end — 1 m behind the crossing street's sidewalk (its crosswalk)
-  const out={L:0,R:0,bar:0}; cross.forEach(x=>{ const t=Math.max(3,(x.row-7.2)/2); out.bar=Math.max(out.bar, x.row/2+1.0); const a=x.g[0], b=x.g[x.g.length-1]; const far=Math.hypot(a[0]-p[0],a[1]-p[1])>Math.hypot(b[0]-p[0],b[1]-p[1])?a:b;
-    const side=((far[0]-p[0])*dy-(far[1]-p[1])*dx)>0?'R':'L'; out[side]=Math.max(out[side],t); }); return out; }
+  const out={L:0,R:0,bar:0,ext:0,LE:{in:0,out:0},RE:{in:0,out:0}}; const ux=k?-dx:dx, uy=k?-dy:dy;   /* from the node into this street; LE / RE: the trim of each side's curb line (in) and property line (out) separately */
+  cross.forEach(x=>{ const a=x.g[0], b=x.g[x.g.length-1]; const far=Math.hypot(a[0]-p[0],a[1]-p[1])>Math.hypot(b[0]-p[0],b[1]-p[1])?a:b;
+    // v3: at a skewed junction the crossing street's curb is reached further along this street. The pavement runs on to the
+    // crossing street's far curb: its half-width ÷ sin of the angle between the streets (ext; capped at 3×). The sidewalk strip on
+    // the crossing street's side stops where BOTH its edges (curb line and property line) are clear of the crossing carriageway —
+    // a square cut at the half-width let the strip's far corner run on into the block's crossing area at a skew
+    const near=far===a?b:a, nxt=far===a?x.g[x.g.length-2]:x.g[1]; let cx=nxt[0]-near[0], cy=nxt[1]-near[1]; const cl=Math.hypot(cx,cy)||1; cx/=cl; cy/=cl; /* the crossing street's direction at the node */
+    const sinA=Math.abs(ux*cy-uy*cx), skew=1/Math.max(sinA,1/3); const hx=Math.max(3,(x.row-7.2)/2);   /* the crossing street's half carriageway */
+    out.ext=Math.max(out.ext,hx*skew); out.bar=Math.max(out.bar,(x.row/2+1.0)*skew);
+    const cu=cx*ux+cy*uy; let nx=cx-cu*ux, ny=cy-cu*uy; const nl=Math.hypot(nx,ny); let tIn=hx*skew, tOut=hx*skew;
+    if(nl>0.05){ nx/=nl; ny/=nl; /* across this street, towards the crossing street */ const a_=ux*cy-uy*cx, b_=nx*cy-ny*cx; const cap=hx*3+o.row/2;
+      const exit=w=>Math.min(cap,Math.max((hx-w*b_)/a_,(-hx-w*b_)/a_));   /* where the strip edge at offset w leaves the crossing carriageway */
+      tIn=exit(o.ctc/2); tOut=exit(o.row/2); }
+    tIn=Math.max(3,tIn); tOut=Math.max(3,tOut);
+    const side=((far[0]-p[0])*dy-(far[1]-p[1])*dx)>0?'R':'L'; out[side]=Math.max(out[side],tIn,tOut); const E=out[side+'E']; E.in=Math.max(E.in,tIn); E.out=Math.max(E.out,tOut); }); return out; }
 // the legs of the proposed block's cross street at end i, in the block's local frame: L / R = how far that leg reaches
 // (its far end's x), null when the cross street does not continue on that side (a T-junction)
 function endLegs(s,i){ const F=localFrame(s); const e=endInfo(s)[i]; const out={L:null,R:null}; if(e.type!=='cross') return out;
@@ -775,7 +809,7 @@ function cityContext(s, R){ const exk=[...CTX_EXCLUDE].join(','); if (CTX_CACHE.
   // its OSM lanes (the Cambie Bridge is recorded at 10.1 m) is widened to its lanes × 3.3 m plus a 1.5 m edge each side
   const streets=SEGS.filter(o=>o.i!==s.i && !CTX_EXCLUDE.has(o.i) && o.g.some(near)).map(o=>{ const trimLR=[0,1].map(k=>endSides(o,k,sameLevelCross(o,k))); const trim=trimLR.map(t=>Math.max(t.L,t.R));   // a street passing under a deck keeps its curbs
     const up=isUpSeg(o); const sc=structCtc(o); const rec=(up&&sc!==o.ctc) ? {...o, ctc:sc, row:Math.max(o.row, Math.round((sc+3)*10)/10)} : o;   // v3: structure widths from lanes (structCtc)
-    return {row:rec.row,u:o.u,s:o,m:laneModel(rec),g:smoothLine(o.g.map(p=>F.toLocal(p[0],p[1])),2),trim,trimLR,bar:trimLR.map(t=>t.bar),cross:trim.map(t=>t>0),up,lvl:up?((o.osm&&o.osm.ly)||1):0}; });
+    return {row:rec.row,u:o.u,s:o,m:laneModel(rec),g:smoothLine(o.g.map(p=>F.toLocal(p[0],p[1])),2),trim,trimLR,bar:trimLR.map(t=>t.bar),ext:trimLR.map(t=>t.ext),edge:trimLR.map(t=>({L:t.LE,R:t.RE})),cross:trim.map(t=>t>0),up,lvl:up?((o.osm&&o.osm.ly)||1):0}; });
   // v3: the City's file carries some structure centrelines twice (1300 Howe St, the Granville St approach north of Pacific):
   // two slabs on one line read as a stacked deck, so a duplicate (same ends, same length) is dropped — the one with a lane count stays
   for(let i=streets.length-1;i>=0;i--){ const st=streets[i]; const a=st.g[0], b=st.g[st.g.length-1], L=plen(st.g);

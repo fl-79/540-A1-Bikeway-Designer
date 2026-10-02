@@ -81,7 +81,7 @@ function drawMap(){
     ctx.strokeStyle=off?'#DADDE3':(USE_COL[s.u]||'#D8DCE2'); ctx.lineWidth=Math.max(0.6,USE_W[s.u]*Math.min(1,lod/300))*dpr; ctx.setLineDash(off?[3*dpr,3*dpr]:[]); path(s.g); ctx.stroke(); }); ctx.setLineDash([]);
   if (lod>700) { ctx.lineWidth=0.5*dpr; ctx.strokeStyle='#C8C4BA';
     BLD.forEach(b=>{ if(b.x<wx0-60||b.x>wx1+60||b.y<wy0-60||b.y>wy1+60) return;
-      ctx.fillStyle=b.f?'#F3C88B':'#E4E2DA'; ctx.beginPath(); b.p.forEach((q,i)=>{ const [sx,sy]=W2S(q[0],q[1]); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.closePath(); ctx.fill(); ctx.stroke(); }); }
+      ctx.fillStyle='#E4E2DA';   /* v3: estimated heights stay flagged in the data (b.f) but are not coloured */ ctx.beginPath(); b.p.forEach((q,i)=>{ const [sx,sy]=W2S(q[0],q[1]); i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy); }); ctx.closePath(); ctx.fill(); ctx.stroke(); }); }
   // bikeways
   BW.forEach(b=>{ const st=BW_STYLE(b.t); ctx.strokeStyle=st.c; ctx.lineWidth=st.w*dpr*Math.min(1.2,Math.max(0.6,lod/250)); ctx.setLineDash((st.dash||[]).map(v=>v*dpr)); if(b.g.every(([x,y])=>x<wx0-300||x>wx1+300||y<wy0-300||y>wy1+300)) return; path(b.g); ctx.stroke(); if (b.a && b.t==='Protected Bike Lanes') { ctx.strokeStyle='#15803D'; ctx.lineWidth=st.w*dpr*0.45; ctx.setLineDash([]); path(b.g); ctx.stroke(); } });
   ctx.setLineDash([]);

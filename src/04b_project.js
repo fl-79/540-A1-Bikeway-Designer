@@ -63,7 +63,7 @@ function projChanged(){ clearTimeout(projChanged.t); projChanged.t=setTimeout(()
   if(typeof laneDeltaDirty==='function') laneDeltaDirty(); if(typeof CTX_CACHE!=='undefined') CTX_CACHE.id=null; renderProj(); if(typeof renderLegend==='function') renderLegend(); if($('screen-map').classList.contains('active')) drawMap(); }
 function projSaveFile(){ const txt=JSON.stringify(projSerialize(),null,1); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'})); a.download=(PROJ.name||'project').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-')+'.bikeproject.json'; a.click(); toast('Project saved as '+a.download); }
 $('proj-file').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ projLoad(JSON.parse(r.result)); toast('Opened '+PROJ.name+' · '+PROJ.proposals.length+' proposal'+(PROJ.proposals.length===1?'':'s')); }catch(err){ toast('Could not open: '+err.message); } }; r.readAsText(f); e.target.value=''; });
-(function projBoot(){ try{ const raw=localStorage.getItem('bikeway-project-v3'); if(raw) projLoad(JSON.parse(raw)); }catch(e){ console.warn('project autosave not restored', e); } })();
+setTimeout(function projBoot(){ try{ const raw=localStorage.getItem('bikeway-project-v3'); if(raw) projLoad(JSON.parse(raw)); }catch(e){ console.warn('project autosave not restored', e); } },0);   // v3: after every module has loaded (the project rows need the score module)
 
 // ── map modes: select (cards) · add (click adds / removes a block) · route (two clicks, the route between fills in) ──
 // the default is to build: every block clicked joins the active proposal (a first click starts "Proposal 1"), a second click

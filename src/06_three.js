@@ -20,7 +20,7 @@ M.ctxTrunk=MAT(lighten(0x8c6a4a,FADE)); M.ctxLeaf=MAT(lighten(0x68be6e,FADE));
 // make them flicker: ground plate 0 · pavement top +0.03 · markings +0.06 · curb / sidewalk top +0.18.
 // The block's own pavement is also at +0.03 (its group is lifted so its element tops land there), so there is no level
 // change where the proposal meets the existing street, and its markings sit ~2.5 cm above its pavement.
-const Y={ground:0, road:0.03, walk:0.18, mark:0.06, block:0.04};   // block: sidewalk/buffer boxes (h .15) top at h−0.03+0.04 = +0.16, curbs ≈ context +0.18
+const Y={ground:0, road:0.03, walk:0.18, mark:0.06, block:0.05};   // block: lanes top at −0.01+0.05 = +0.04, 1 cm above the context pavement (+0.03) so the two never share a plane where a cross street's pavement runs on under the block's lanes (v3: that flicker was the "striped triangle"); sidewalk/buffer boxes (h .15) top at +0.17, 1 cm under the context curbs (+0.18)
 // flat pavement markings are merged into one mesh per colour (thousands of dashes would otherwise be thousands of draw calls)
 const MQ = { white:MAT(0xffffff,{side:THREE.DoubleSide}), yellow:MAT(0xffd400,{side:THREE.DoubleSide}), bike:MAT(0x5fae7d,{side:THREE.DoubleSide}), paint:MAT(0x9fc4aa,{side:THREE.DoubleSide}), shared:MAT(0x7f9a86,{side:THREE.DoubleSide}) };
 // faded versions for the existing streets (lighten() is defined below MAT, so these are filled in lazily)
@@ -136,7 +136,10 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
       quad(TL0,TR0,TR1,TL1); quad(BL0,BL1,BR1,BR0); quad(TL0,TL1,BL1,BL0); quad(TR0,BR0,BR1,TR1); if(i===1) quad(TL0,BL0,BR0,TR0); if(i===n-1) quad(TL1,TR1,BR1,BL1); }
     const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(P,3)); geo.computeVertexNormals(); const m=new THREE.Mesh(geo,ds(mat)); m.receiveShadow=true; if(hf&&up) m.castShadow=true; (ribbon.target||g).add(m); };
   const ribbon=(pts,w,mat,top,h,hf,yoff)=>{ if(pts.length<2) return; ribbonLR(offsetLine(pts,-w/2),offsetLine(pts,w/2),mat,top,h,hf,yoff); };
-  const strip=(pts,w,mat,top,h,hf,yoff)=>clipPoly(pts,BOX).forEach(p=>ribbon(p,w,mat,top,h,hf,yoff));
+  // v3: a surface is cut exactly at the site plate's edge: both of its edges are clipped to the plate (clipping the centreline
+  // alone left a lip of half the width hanging past the edge wherever a street left the plate at an angle)
+  const clipLR=(L,R)=>{ const Lc=clipPoly(L,BOX), Rc=clipPoly(R,BOX); return Lc.length===Rc.length ? Lc.map((l,i)=>[l,Rc[i]]) : null; };
+  const strip=(pts,w,mat,top,h,hf,yoff)=>{ const pr=clipLR(offsetLine(pts,-w/2),offsetLine(pts,w/2)); if(pr){ pr.forEach(([l,r])=>ribbonLR(l,r,mat,top,h,hf,yoff)); return; } clipPoly(pts,BOX).forEach(p=>ribbon(p,w,mat,top,h,hf,yoff)); };
   const deckAt=deckAtSt;
   // decks that share a surface (the bridge and its ramps, or the deck under the block) are co-planar: the narrower one sits a few
   // millimetres higher so the two surfaces never flicker through each other
@@ -154,7 +157,7 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   // v3: the deck that carries the block: its markings run straight through the block, silenced only inside the block's bike lanes and buffers
   const BZ=(curOpt()?curOpt().els:[]).filter(e=>e.k==='bike'||e.k==='buf').map(e=>[e.x-0.1,e.x+e.w+0.1]);
   const mkRuns=(st,gg)=>{ if(st!==C.blockHost||!BZ.length) return clipPoly(gg,BOX); const pts=[gg[0],...alongLine(gg,1.5,0.75).map(q=>[q[0],q[1]]),gg[gg.length-1]]; const runs=[]; let run=[]; pts.forEach(p=>{ const inZ=p[1]>0&&p[1]<LEN&&BZ.some(([a,b])=>p[0]>a&&p[0]<b); if(inZ){ if(run.length>1) runs.push(run); run=[]; } else run.push(p); }); if(run.length>1) runs.push(run); return runs.flatMap(r=>clipPoly(r,BOX)); };
-  C.streets.forEach(st=>{ if(!inR(st.g)) return; const m=st.m; const band=trimLine(st.g,st.trim[0],st.trim[1]), pav=extendLine(st.g,st.trim[0],st.trim[1]);
+  C.streets.forEach(st=>{ if(!inR(st.g)) return; const m=st.m; const band=trimLine(st.g,st.trim[0],st.trim[1]), pav=extendLine(st.g,(st.ext||st.trim)[0],(st.ext||st.trim)[1]);   /* v3: the pavement runs to the crossing street's far curb (ext), the sidewalk strips stop clear of its carriageway (trimLR) */
     // v2: bridges and viaducts stand on their deck (ramping down to grade where they land), cast shadows and sit on piers
     const hf=st.deck?((x,z)=>HF(st,x,z)):null, yM=hf?((x,z)=>ez(x,z)+Y.mark+hf(x,z)):yRoad; st._yM=yM;
     // v3: a structure's markings are collected (dropped inside any other piece at the same height) and drawn joined after the loop
@@ -170,7 +173,7 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
       const dropIn=gg=>{ const pts=[gg[0],...alongLine(gg,2,1).map(q=>[q[0],q[1]]),gg[gg.length-1]]; const runs=[]; let run=[]; pts.forEach(p=>{ if(inDeck(p)||atGrade(p)){ if(run.length>1) runs.push(run); run=[]; } else run.push(p); }); if(run.length>1) runs.push(run); return runs; };
       // heights by position along the ramp's (extended) centreline, so both edges of the taper share one height
       // every vertex takes the shared structure height (HF): the ramp's own height outside its deck, the deck's inside it
-      ribbonLR(st.E.pav.L,st.E.pav.R,M.ctxRd,Y.road,0.8,hf);
+      (clipLR(st.E.pav.L,st.E.pav.R)||[[st.E.pav.L,st.E.pav.R]]).forEach(([l,r])=>ribbonLR(l,r,M.ctxRd,Y.road,0.8,hf));   /* v3: cut at the plate edge */
       ['L','R'].forEach(sd=>{ const a=st.E.pav[sd], b=st.E.band[sd]; const n=Math.max(a.length,b.length); const A=resampleLine(a,n), B=resampleLine(b,n);
         // the parapet strip between the pavement edge and the band edge, only outside the deck
         const mid=A.map((p,i)=>[(p[0]+B[i][0])/2,(p[1]+B[i][1])/2]); dropIn(mid).forEach(run=>{ const w=Math.max(0.5,Math.hypot(B[0][0]-A[0][0],B[0][1]-A[0][1])); strip(run,w,M.ctxSw,Y.walk,0.6,hf); }); });
@@ -180,8 +183,15 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
       return; }
     // sidewalk zones as two strips (curb line → property line) so the pavement stays visible between them, plus the curb lines
     // per side: at a T-junction the sidewalk and curb on the side with no crossing street run straight through
-    { const bandW=hf ? structBandW(st) : st.row; const swW=Math.max(0.5,(bandW-m.ctc)/2); [-1,1].forEach(sg=>{   /* a ramp carries only its parapet, a bridge a sidewalk */ const sd=sg<0?'L':'R'; const bs=hf?pav:trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(bs.length<2) return;
-      strip(offsetLine(bs,sg*(m.ctc/2+swW/2)),swW,M.ctxSw,Y.walk,hf?0.6:0.45,hf); strip(offsetLine(bs,sg*m.ctc/2),0.25,M.ctxCurb,Y.walk,hf?0.6:0.45,hf); }); }
+    { const bandW=hf ? structBandW(st) : st.row; const swW=Math.max(0.5,(bandW-m.ctc)/2); [-1,1].forEach(sg=>{   /* a ramp carries only its parapet, a bridge a sidewalk */ const sd=sg<0?'L':'R';
+      if(hf){ strip(offsetLine(pav,sg*(m.ctc/2+swW/2)),swW,M.ctxSw,Y.walk,0.6,hf); strip(offsetLine(pav,sg*m.ctc/2),0.25,M.ctxCurb,Y.walk,0.6,hf); return; }
+      // v3: at grade each edge of the strip (curb line, property line) stops where IT leaves the crossing street's carriageway, so the
+      // strip's end runs along that street's curb line at any angle and meets the block's sidewalk corner there
+      const te=(i,w)=>st.edge?st.edge[i][sd][w]:st.trimLR[i][sd]; const Le=trimLine(offsetLine(st.g,sg*m.ctc/2),te(0,'in'),te(1,'in')), Re=trimLine(offsetLine(st.g,sg*(m.ctc/2+swW)),te(0,'out'),te(1,'out'));
+      const Lc=Le.length>1?clipPoly(Le,BOX):[], Rc=Re.length>1?clipPoly(Re,BOX):[];
+      if(Lc.length===1&&Rc.length===1) ribbonLR(sg<0?Rc[0]:Lc[0], sg<0?Lc[0]:Rc[0], M.ctxSw,Y.walk,0.45,null);
+      else { const bs=trimLine(st.g, st.trimLR[0][sd], st.trimLR[1][sd]); if(bs.length>1) strip(offsetLine(bs,sg*(m.ctc/2+swW/2)),swW,M.ctxSw,Y.walk,0.45,null); }
+      const cb=trimLine(st.g,te(0,'in'),te(1,'in')); if(cb.length>1) strip(offsetLine(cb,sg*m.ctc/2),0.25,M.ctxCurb,Y.walk,0.45,null); }); }
     strip(pav,Math.max(3,m.ctc),M.ctxRd,Y.road,hf?0.8:0.3,hf);
     if(hf) alongLine(st.g,24,12).forEach(([x,z])=>{ const h=hf(x,z); if(h<2.5||!inBox(x,z)) return; cyl(0.55,Math.max(0.5,h-0.8),MP.pier,x,ez(x,z),z,g,12); });   // piers under the deck, every 24 m
     streetMarkings(st).forEach(mk=>{ if(hf){ st._emitMk(mk); return; } mkRuns(st,mk.g).forEach(p=>(mk.kind==='centre'?Q.yellow:Q.white).line(p, mk.kind==='park'?0.08:mk.w, yM, mk.dash)); });
@@ -249,7 +259,7 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   C.blds.forEach(b=>{ if(b.c[1]>-20&&b.c[1]<LEN+20&&Math.abs(b.c[0])>Math.abs(S_.xL)-1&&Math.abs(b.c[0])<Math.abs(S_.xL)+40) return; if(!b.p.every(([x,z])=>inBox(x,z))) return;   // whole footprint inside the plate
     const sh=new THREE.Shape(b.p.map(([x,z])=>new THREE.Vector2(x,-z)));
     const geo=new THREE.ExtrudeGeometry(sh,{depth:b.h,bevelEnabled:false});
-    const m=new THREE.Mesh(geo, b.f?M.bldNoH:M.bld); m.rotation.x=-Math.PI/2; m.position.y=ez(b.c[0],b.c[1])+Y.ground; m.castShadow=m.receiveShadow=true; g.add(m); outline(m,g,EDGE2); });
+    const m=new THREE.Mesh(geo, M.bld); m.rotation.x=-Math.PI/2; m.position.y=ez(b.c[0],b.c[1])+Y.ground; m.castShadow=m.receiveShadow=true; g.add(m); outline(m,g,EDGE2); });
   // ── labels: existing traffic on the block and on the nearest surrounding streets (class · speed · lanes · direction · parking · routes · facility)
   //    full detail for the streets meeting the block's ends, a short line for the nearest others
   const EIs=S_.EI, endSegs=new Set(); EIs.forEach(e=>{ (e.segs||[]).concat(e.cont||[]).forEach(o=>endSegs.add(o)); });
@@ -266,11 +276,16 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
   // where posts / planters / barrier may stand: outside the 6 m corner-island zone at a cross street
   const zp0 = EI[0].type==='cross'?ZA+IX.setback+0.5:ZA+0.5, zp1 = EI[1].type==='cross'?ZB-IX.setback-0.5:ZB-0.5; const protOK=z=>z>zp0&&z<zp1;
   const gaps=sd=>(S_.lanes[sd]||[]).filter(p=>p>ZA+2&&p<ZB-2).map(p=>[p-LW/2,p+LW/2]);
-  const runs=(sd)=>{ let z=ZA; const out=[]; gaps(sd).sort((a,b)=>a[0]-b[0]).forEach(([a,b])=>{ if(a-z>0.05) out.push([z,a]); z=b; }); if(ZB-z>0.05) out.push([z,ZB]); return out; };
+  const runs=(sd,za,zb)=>{ if(za==null) za=ZA; if(zb==null) zb=ZB; let z=za; const out=[]; gaps(sd).sort((a,b)=>a[0]-b[0]).forEach(([a,b])=>{ if(a-z>0.05) out.push([z,a]); z=b; }); if(zb-z>0.05) out.push([z,zb]); return out; };
   // No slab of its own: the block sits on the shared ground plate, and the cross streets' pavement (extended to this block's
   // far curb in buildCity) is the intersection surface. Sidewalks run between the cross streets' curb lines.
   const zS0 = EI[0].type==='cross' ? ZA : 0, zS1 = EI[1].type==='cross' ? ZB : LEN;
   const noLeg=(i,sd)=>EI[i].type==='cross' && (sd==='L'?S_.legs[i].L==null:S_.legs[i].R==null);   // T-junction: the cross street does not continue on this side
+  // v3: the cross streets' real curb lines (endGeom, shared with the plan). A skewed cross street's curb cuts into the block short
+  // of its square section end on one side: every element in the x-range [x0,x1] stops at that curb (cutZ), so nothing of the block
+  // runs on into the crossing carriageway (no doubled surfaces, no sidewalk slab across the cross street)
+  const GE=EI.map((e,i)=>e.type==='cross'?endGeom(S_,i,sw_l(els),sw_r(els)):null);
+  const cutZ=(i,x0,x1)=>{ const G=GE[i], zE=i?ZB:ZA; if(!G) return zE; const sgn=i?1:-1; let z=zE; [x0,x1].forEach(x=>{ const c=G.fb(x).near.z; z=sgn>0?Math.min(z,c):Math.max(z,c); }); return z; };
   // the carriageway strip under the block's own elements, so gaps between elements never show the plate
   if(!S_.host) box(sw_r(els)-sw_l(els),0.3,zS1-zS0,M.asphalt,sw_l(els),-0.34,zS0,g);   // top −0.04, just under the element boxes (over a host deck the deck is the surface)
   // v2: on a structure — the deck slab under the block, piers to the ground and parapets on the edges (none over a host deck)
@@ -280,21 +295,22 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
   const HALF=Math.max(320, LEN*0.6+80, D.plateHalf||0), BOXB={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF};   // v3: frontages stay inside the site plate, and near the block
   (T3.other?[]:S_.C.blds).forEach(b=>{ if(b.c[1]<-20||b.c[1]>LEN+20) return; if(Math.abs(b.c[0])<Math.abs(xL)-1||Math.abs(b.c[0])>Math.abs(xL)+60) return; if(!b.p.every(([x,z])=>x>=BOXB.x0&&x<=BOXB.x1&&z>=BOXB.z0&&z<=BOXB.z1)) return;
     const sh=new THREE.Shape(b.p.map(([x,z])=>new THREE.Vector2(x,-z)));
-    const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:Math.max(b.h,3),bevelEnabled:false}), b.f?M.bldNoH:M.bld);
+    const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:Math.max(b.h,3),bevelEnabled:false}), M.bld);
     const [bwx,bwy]=S_.C.F.toWorld(b.c[0],b.c[1]); m.rotation.x=-Math.PI/2; m.position.y=elevAt(bwx,bwy)-TZ0-Math.tan(Math.atan(D.ctx.grade))*b.c[1]+Y.ground-DH; m.castShadow=m.receiveShadow=true; g.add(m); outline(m,g); });
   // elements
   els.forEach(e=>{ const sd=e.side==='C'?'R':e.side; const h=Math.max(e.h,0.02);
     if(S_.host&&(e.k==='travel'||e.k==='park'||e.k==='sw')) return;   // v3: over a host deck the block adds only its bike lanes and buffers
     // element boxes top out at h−0.03 (group; h ≥ 0.02), i.e. pavement at −0.01 → world Y.road, level with the existing street;
     // pavement markings drawn from y≈0.005 then sit a clear 2.5 cm above them
-    if (e.k==='travel'||e.k==='park'||e.k==='bike') { box(e.w,h+0.02,ZB-ZA, e.k==='bike'?M.bike:e.k==='park'?M.park:M.asphalt, e.x,-0.05,ZA,g); }
+    const za=cutZ(0,e.x,e.x+e.w), zb=cutZ(1,e.x,e.x+e.w);   /* v3: this element's ends — the square section end, or the skewed cross street's curb where that cuts in earlier */
+    if (e.k==='travel'||e.k==='park'||e.k==='bike') { box(e.w,h+0.02,zb-za, e.k==='bike'?M.bike:e.k==='park'?M.park:M.asphalt, e.x,-0.05,za,g); }
     else { const mat=e.k==='sw'?M.sw:(SEP[e.sep].bufKind==='barrier'?M.asphalt:(SEP[e.sep].bufKind==='painted'||SEP[e.sep].bufKind==='paint')?M.asphalt:M.buf);
       // sidewalks run the block but stop at a cross street's curb line (as in plan); the corner is rounded by the curb return below
       // (at a T-junction the side with no cross-street leg keeps its sidewalk running to the node, with no corner)
-      const rr = e.k==='sw' ? (()=>{ let z=noLeg(0,sd)?0:zS0; const zE=noLeg(1,sd)?LEN:zS1;   /* the corner slab (below) takes over at a cross street */ const o=[]; gaps(sd).forEach(([a,b])=>{ if(a-z>0.05) o.push([z,a]); z=b; }); if(zE-z>0.05) o.push([z,zE]); return o; })() : runs(sd);
+      const rr = e.k==='sw' ? (()=>{ let z=noLeg(0,sd)?0:(EI[0].type==='cross'?za:0); const zE=noLeg(1,sd)?LEN:(EI[1].type==='cross'?zb:LEN);   /* the corner slab (below) takes over at a cross street */ const o=[]; gaps(sd).forEach(([a,b])=>{ if(a-z>0.05) o.push([z,a]); z=b; }); if(zE-z>0.05) o.push([z,zE]); return o; })() : runs(sd,za,zb);
       rr.forEach(([a,b])=>box(e.w,h+0.02,b-a,mat,e.x,-0.05,a,g)); gaps(sd).forEach(([a,b])=>box(e.w,0.04,b-a,M.asphalt,e.x,-0.05,a,g));
       if (e.k==='buf'){ const kind=SEP[e.sep].bufKind;
-        if (kind==='barrier'){ runs(sd).forEach(([a,b])=>{ for(let z=Math.max(a,zp0);z<Math.min(b,zp1)-0.1;z+=3){ const d=Math.min(3,Math.min(b,zp1)-z); const bm=box(0.56,0.69,d-0.05,M.barrier,e.x+(e.w-0.56)/2,0,z,g); if(Math.floor(z/3)%2===0) box(0.58,0.12,d-0.05,M.amber,e.x+(e.w-0.58)/2,0.45,z,g); } }); }
+        if (kind==='barrier'){ runs(sd,za,zb).forEach(([a,b])=>{ for(let z=Math.max(a,zp0);z<Math.min(b,zp1)-0.1;z+=3){ const d=Math.min(3,Math.min(b,zp1)-z); const bm=box(0.56,0.69,d-0.05,M.barrier,e.x+(e.w-0.56)/2,0,z,g); if(Math.floor(z/3)%2===0) box(0.58,0.12,d-0.05,M.amber,e.x+(e.w-0.58)/2,0.45,z,g); } }); }
         else if (kind==='painted'){ for(let z=1.5;z<LEN-1;z+=3){ if(inLaneAt(S_,sd,z)||!protOK(z)) continue; cyl(0.05,0.95,M.post,e.x+e.w/2,0,z,g,10); box(0.11,0.18,0.11,M.bike,e.x+e.w/2-0.055,0.5,z-0.055,g); } for(let z=0.5;z<LEN;z+=1.2){ if(!protOK(z)) continue; box(e.w-0.1,0.01,0.12,M.white,e.x+0.05,h+0.001,z,g); } }
         else if (kind==='paint'){ for(let z=0.5;z<LEN;z+=1.2){ if(!protOK(z)) continue; box(e.w-0.1,0.01,0.12,M.white,e.x+0.05,h+0.001,z,g); } }   // v2: existing painted buffer, no posts
         else if (kind==='raisedlane'){ }   // v2: a plain concrete curb, no posts — the lane itself is raised
@@ -329,11 +345,13 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
     // v2: the corners follow the cross street's real curbs (endGeom, shared with the plan): the block's sidewalk runs on to the
     // cross street's near curb and its corner is a fillet tangent to both curb lines at whatever angle they meet, built as one
     // extruded slab at sidewalk height (−0.05 … +0.12, like the sidewalk runs); a missing leg keeps its sidewalk to the node
-    const hasL=!noLeg(i,'L'), hasR=!noLeg(i,'R'); const G=endGeom(S_,i,cXL,cXR); const rq=Math.min(RAD, sw[0].w-0.2);
-    const onSide=z=>(z-zEdge)*sgn<0?zEdge:z;   // never behind the block's own section end
+    const hasL=!noLeg(i,'L'), hasR=!noLeg(i,'R'); const G=GE[i]; const rq=Math.min(RAD, sw[0].w-0.2);
     [[hasL,sw[0],cXL,-1],[hasR,sw[1],cXR,1]].forEach(([has,s,curbX,ox])=>{ if(!has||S_.host) return; const xPL=ox<0?s.x:s.x+s.w; const FL=G.fillet(curbX,ox,rq);
-      const pts=[[xPL,zEdge],[curbX,zEdge]];
-      if(FL&&FL.ok){ pts.push(FL.TA,...FL.arc(12).slice(1)); const tb=FL.TB; for(let k=1;k<=4;k++){ const x=tb[0]+(xPL-tb[0])*k/4; pts.push([x,onSide(G.fb(x).near.z)]); } }
+      // v3: the slab starts where this sidewalk's run stopped (cutZ: the section end, or the skewed curb's innermost reach) and
+      // runs out to the cross street's curb line, so the corner is one piece whatever the angle
+      const zS=cutZ(i,s.x,s.x+s.w); const onSide=z=>(z-zS)*sgn<0?zS:z;   // never behind the sidewalk run's end
+      const pts=[[xPL,zS],[curbX,zS]];
+      if(FL&&(FL.TA[1]-zS)*sgn>-0.01){ pts.push(FL.TA,...FL.arc(12).slice(1)); const tb=FL.TB; for(let k=1;k<=4;k++){ const x=tb[0]+(xPL-tb[0])*k/4; pts.push([x,onSide(G.fb(x).near.z)]); } }
       else { [curbX,(curbX+xPL)/2,xPL].forEach(x=>pts.push([x,onSide(G.fb(x).near.z)])); }
       const ring=pts.map(([x,z])=>[x,onSide(z)]); if(Math.abs(ring.reduce((a,p,k)=>{ const q=ring[(k+1)%ring.length]; return a+p[0]*q[1]-q[0]*p[1]; },0))<0.05) return;   // nothing between the section end and the curb
       const sh=new THREE.Shape(ring.map(([x,z])=>new THREE.Vector2(x,-z))); const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:0.17,bevelEnabled:false}),M.sw); m.rotation.x=-Math.PI/2; m.position.y=-0.05; m.receiveShadow=true; g.add(m); });

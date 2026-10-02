@@ -6,6 +6,6 @@ rd=lambda p: p.read_text(encoding='utf-8')          # sources contain UTF-8 symb
 js=''.join(rd(src/f)+'\n' for f in order)
 ovp=root/'data'/'overrides.json'; ov=rd(ovp) if ovp.exists() else '{}'   # v2: reviewer's verdicts from audit.html (see scripts/audit.py)
 import datetime; stamp=datetime.datetime.now().strftime('%Y-%m-%d %H:%M')   # v3: a build stamp in the header, so a cached old page is recognisable
-head=rd(src/'01_head.html').replace('Rapid Implementation Guide</div>', 'Rapid Implementation Guide · <span id="build" title="Build time of this page. Older than your last change? Hard-reload (Ctrl+F5).">build '+stamp+'</span></div>', 1)
+head=rd(src/'01_head.html').replace('>build</div>', '>build '+stamp+'</div>', 1)   # the small corner label (#build in 01_head.html)
 html=head+'const BUILD='+repr(stamp)+';\nconst DATA='+rd(root/'data'/'data.json')+';\nDATA.overrides='+ov+';\n'+js+rd(src/'07_boot.js')
 (root/'index.html').write_text(html, encoding='utf-8'); print('index.html', round(len(html)/1048576,1), 'MB')
