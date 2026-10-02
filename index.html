@@ -376,7 +376,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
         <div class="grow"></div><span class="small muted" id="dir-note"></span>
         <button class="small primary" id="bh-confirm" title="The design is saved as you edit; this marks the block designed and opens the next block that still needs attention">Design confirmed → next block</button>
       </div>
-      <div class="breview" id="breview" style="display:none"><div><b>Review.</b> Every block is verified and designed; the score and statistics below are for the whole proposal. Click a block tab to change its design.</div><div class="grow"></div><button class="small primary" id="br-done">Done · back to map</button></div>
+      <div class="breview" id="breview" style="display:none"><div><b>Review.</b> Every block is verified and designed: the drawings show the whole proposal as designed, and the score below is for all of it.</div><div class="grow"></div><button class="ghost small" id="br-blocks" title="Back to the block tabs">← Back to blocks</button><button class="small" id="br-export" title="Download a report: the proposed plan and 3D view, the blocks, the score and statistics">Export summary ↓</button><button class="small primary" id="br-done">Done · back to map</button></div>
       <div class="bscore stats" id="bscore" style="display:none"></div>
       <div class="bcols" id="bcols">
         <div class="sec"><h4>Option summary</h4><div class="prosCons" id="summary"></div>
@@ -1112,7 +1112,7 @@ const isStop=e=>e.type==='dead'||e.type==='path';   // the street ends for cars
 function crossWidths(s){ return endInfo(s).map(e=>e.w); }
 
 // ── City context in the block's local frame (x across, z along) ───────────
-const CTX_CACHE={id:null};
+const CTX_CACHE={id:null}; const CTX_EXCLUDE=new Set();   // v3: blocks drawn as full designs in the review are not context streets
 function localFrame(s){ const P0=s.g[0], P1=s.g[s.g.length-1]; const dx=P1[0]-P0[0], dy=P1[1]-P0[1], L=Math.hypot(dx,dy)||1; const u=[dx/L,dy/L];
   return { P0, u, toLocal:(x,y)=>{ const rx=x-P0[0], ry=y-P0[1]; return [ rx*u[1]-ry*u[0], rx*u[0]+ry*u[1] ]; },
            toWorld:(lx,lz)=>[ P0[0] + lz*u[0] + lx*u[1], P0[1] + lz*u[1] - lx*u[0] ],
@@ -1201,7 +1201,7 @@ function structEdges(st, hw, halfDeck, hwFn){ const g=st.gx||st.g; const ext0=st
     if(nose){ const a0=alongOnPoly(ED,nose)[1], a1=clamp(aB+dirB*60,0,plen(ED)); const lo=Math.min(a0,a1), hi=Math.max(a0,a1); if(hi-lo>4){ const line=[]; for(let t=lo;t<=hi;t+=3) line.push(pointAlong(ED,t)); line.push(pointAlong(ED,hi)); merges.push({line, deck:o}); } }
     if(outerL) Lk=newE; else Rk=newE; L=k?Lk:Lk.slice().reverse(); R=k?Rk:Rk.slice().reverse(); taper=true; });
   return {L,R,taper,merges}; }
-function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CTX_CACHE.v; const F=localFrame(s); const cx=(s.g[0][0]+s.g[s.g.length-1][0])/2, cy=(s.g[0][1]+s.g[s.g.length-1][1])/2;
+function cityContext(s, R){ const exk=[...CTX_EXCLUDE].join(','); if (CTX_CACHE.id===s.i && CTX_CACHE.R===R && CTX_CACHE.ex===exk) return CTX_CACHE.v; const F=localFrame(s); const cx=(s.g[0][0]+s.g[s.g.length-1][0])/2, cy=(s.g[0][1]+s.g[s.g.length-1][1])/2;
   const near=p=>Math.hypot(p[0]-cx,p[1]-cy)<R+200;
   // surrounding streets carry their full record (s) so the renderers can draw existing lanes, direction, parking, signals
   // trim[k]: how far the sidewalk band / curbs stop short of the node at end k (the widest crossing street's half carriageway),
@@ -1210,7 +1210,7 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
   // and sidewalk on the other side run straight through instead of stopping at a curb line that is not there
   // v2: centrelines are smoothed (curves read as curves); a bridge / viaduct whose right-of-way value is implausibly narrow for
   // its OSM lanes (the Cambie Bridge is recorded at 10.1 m) is widened to its lanes × 3.3 m plus a 1.5 m edge each side
-  const streets=SEGS.filter(o=>o.i!==s.i && o.g.some(near)).map(o=>{ const trimLR=[0,1].map(k=>endSides(o,k,sameLevelCross(o,k))); const trim=trimLR.map(t=>Math.max(t.L,t.R));   // a street passing under a deck keeps its curbs
+  const streets=SEGS.filter(o=>o.i!==s.i && !CTX_EXCLUDE.has(o.i) && o.g.some(near)).map(o=>{ const trimLR=[0,1].map(k=>endSides(o,k,sameLevelCross(o,k))); const trim=trimLR.map(t=>Math.max(t.L,t.R));   // a street passing under a deck keeps its curbs
     const up=isUpSeg(o); const sc=structCtc(o); const rec=(up&&sc!==o.ctc) ? {...o, ctc:sc, row:Math.max(o.row, Math.round((sc+3)*10)/10)} : o;   // v3: structure widths from lanes (structCtc)
     return {row:rec.row,u:o.u,s:o,m:laneModel(rec),g:smoothLine(o.g.map(p=>F.toLocal(p[0],p[1])),2),trim,trimLR,bar:trimLR.map(t=>t.bar),cross:trim.map(t=>t>0),up,lvl:up?((o.osm&&o.osm.ly)||1):0}; });
   // v3: the City's file carries some structure centrelines twice (1300 Howe St, the Granville St approach north of Pacific):
@@ -1398,7 +1398,7 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
   // v3: the other blocks of the proposal this block belongs to, with their proposed lanes and buffers (drawn as context so the
   // whole proposal is seen, not one block)
   const propLanes=(typeof proposalContextLanes==='function')?proposalContextLanes(s,F,near):[];
-  const v={streets,bike,bikeHosted,bikeChains,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.v=v; return v; }
+  const v={streets,bike,bikeHosted,bikeChains,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.ex=exk; CTX_CACHE.v=v; return v; }
 function pointInRing(x,z,r){ let inside=false; for(let i=0,j=r.length-1;i<r.length;j=i++){ const [xi,zi]=r[i], [xj,zj]=r[j]; if(((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/((zj-zi)||1e-9)+xi)) inside=!inside; } return inside; }
 
 // ── v2: review export — every block end the tool reads as something special, for checking against Google Maps ──────────
@@ -1635,7 +1635,7 @@ function openDesign(s){
   renderPropNote(); if(typeof renderPropNav==='function') renderPropNav(); if(typeof refreshPhoto==='function') refreshPhoto();
   setView(D.view);
   if(typeof showSV==='function') showSV(false);   // v3: the street-view mini window for checking the existing street
-  if(typeof applyPropDir==='function') applyPropDir(); if(typeof setMode==='function') setMode((rec&&rec.verified)?'design':'verify');   // v3: a block opens on its existing view until verified, then on its design
+  if(typeof applyPropDir==='function') applyPropDir(); if(typeof setMode==='function'){ const m=D.pendingReview?'review':(rec&&rec.verified)?'design':'verify'; D.pendingReview=false; setMode(m); }   // v3: a block opens on its existing view until verified, then on its design (or the review it was opened for)
 }
 // v3: the block's place in the project
 function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`saved as you edit · <b>${esc(p.name)}</b>`:''; }
@@ -1815,8 +1815,8 @@ function propStore(s, opt, c){ const p=propOf(s.i)||activeProp()||newProposal();
 function proposalContextLanes(s,F,near){ const p=propOf(s.i); if(!p||p.hidden) return []; const out=[];
   Object.values(p.blocks).forEach(rec=>{ if(rec.i===s.i) return; const o=SEGS[rec.i]; if(!o||!o.g.some(near)) return; const opt=rec.opt; if(!opt||opt.sep==='shared') return;
     const laid=cloneJ(opt.els); layout(laid);   // x positions come from the layout (stored options carry widths only)
-    const els=laid.filter(e=>e.k==='bike'||e.k==='buf').map(e=>({k:e.k, x:e.x, w:e.w, h:e.h||0, sep:e.sep, two:!!e.two}));
-    if(els.length) out.push({s:o, name:o.n, g:smoothLine(o.g).map(q=>F.toLocal(q[0],q[1])), els, ctc:rec.x?rec.x.ctc:o.ctc, designed:!rec.auto}); });
+    const all=laid.map(e=>({k:e.k, x:e.x, w:e.w, h:e.h||0, sep:e.sep, two:!!e.two, side:e.side})); const els=all.filter(e=>e.k==='bike'||e.k==='buf');   // v3: the review draws the whole cross-section (all)
+    if(els.length||D.mode==='review') out.push({s:o, name:o.n, g:smoothLine(o.g).map(q=>F.toLocal(q[0],q[1])), els, all, ctc:rec.x?rec.x.ctc:o.ctc, designed:!rec.auto}); });
   return out; }
 // ── routing: the shortest street route between two blocks, over blocks that can take a lane ──
 function routeBlocks(a,b){ if(a===b) return [a]; const dist=new Map([[a.i,0]]), prev=new Map(), done=new Set(); const heap=[[0,a.i]];
@@ -2023,7 +2023,7 @@ function statsHTML(p, S){ S=S||propStats(p); const km=(S.len/1000).toFixed(2); c
     <div class="label" style="margin-top:10px">Street photos (check the existing street)</div><div class="stats-photos small muted">…</div>`; }
 // ── v3: the score where it is seen — a box on the proposal card, a number on each proposal row, a live chip on the design page ──
 // S: propStats result; mode 'box' (card), 'row' (project panel), 'chip' (design page)
-function scoreBoxHTML(S, mode){ const sc=S.score; const pc=v=>Math.round(v); const sgn=v=>(v>=0?'+':'')+(Math.abs(v)<10?v.toFixed(1):Math.round(v));   // one decimal on the change, so a block's contribution is visible if(!sc||!sc.after) return mode==='row'?'':'<div class="small muted">No score grid in the data.</div>';
+function scoreBoxHTML(S, mode){ const sc=S.score; const pc=v=>Math.round(v); const sgn=v=>(v>=0?'+':'')+(Math.abs(v)<10?v.toFixed(1):Math.round(v));   /* one decimal on the change, so a block's contribution is visible */ if(!sc||!sc.after) return mode==='row'?'':'<div class="small muted">No score grid in the data.</div>';
   const a=sc.after.total, b=sc.before.total, d=a-b; const band=bandOf(a); const col=scoreColor(a);
   if(mode==='row') return `<span class="srow" title="Bike score around this proposal: ${pc(b)} before → ${pc(a)} after" style="color:${col}">${pc(a)}<small>${sgn(d)}</small></span>`;
   if(mode==='chip') return `<b style="color:${col}">${pc(a)}</b> <span class="muted">bike score · ${pc(b)} → ${pc(a)} (${sgn(d)}) · ${band[1]}</span>`;
@@ -2035,7 +2035,7 @@ function updateLiveScore(){ const el=$('stp3'); if(!D.ctx) return; /* the Review
     const key=(p.id)+'|'+Object.keys(p.blocks).join(',')+'|'+o.sep; if(updateLiveScore.key===key) return; updateLiveScore.key=key;
     const S=propStats(p, extra); const sc=S.score; if(!sc||!sc.after){ if(el) el.textContent='Review & score'; return; } const a=sc.after.total, d=a-sc.before.total;
     const ds=(d>=0?'+':'')+(Math.abs(d)<10?d.toFixed(1):Math.round(d)); if(el) el.innerHTML=`Review &amp; score · <b style="color:${scoreColor(a)}">${Math.round(a)}</b> <small style="color:${d>=0?'var(--green)':'var(--red)'}">${ds}</small>`;
-    const g=$('rec-score'); if(g) g.innerHTML=`Bike score gauge — the proposal with this design: <b style="color:${scoreColor(a)}">${Math.round(a)}</b> (${ds} on the existing network, ${bandOf(a)[1]}). Details on the Review &amp; score tab once every block is designed.`; el.title='Bike score around '+(p.id==='tmp'?'this block':p.name)+' with the design being edited: '+Math.round(sc.before.total)+' before → '+Math.round(a)+' after. Click for the details.'; }, 200); }
+    const g=$('rec-score'); if(g) g.innerHTML=`Bike score gauge — the proposal with this design: <b style="color:${scoreColor(a)}">${Math.round(a)}</b> (${ds} on the existing network, ${bandOf(a)[1]}). Details on the Review &amp; score tab once every block is designed.`; if(el) el.title='Bike score around '+(p.id==='tmp'?'this block':p.name)+' with the design being edited: '+Math.round(sc.before.total)+' before → '+Math.round(a)+' after. Click for the details.'; }, 200); }
 function bindStats(box,p){ const m=box.querySelector('[data-act=method]'); if(m) m.onclick=e=>{ e.preventDefault(); $('method').classList.add('show'); }; const ph=box.querySelector('.stats-photos'); if(ph&&typeof renderPhotoStrip==='function') renderPhotoStrip(p, ph); }
 function showStats(id){ const p=PROJ.proposals.find(x=>x.id===id)||activeProp(); if(!p) return; PROJ.active=p.id; showPropCard(p, null, {details:true}); }   // v3: the details open inside the proposal card
 // the Score tab of the design screen: the proposal this block belongs to, or the block on its own as a one-block proposal
@@ -2191,10 +2191,16 @@ function renderBlockBar(){ const el=$('blockbar'); const p=curProp(); if(!el) re
   el.querySelectorAll('button[data-i]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(D.ctx&&i===D.ctx.seg.i&&D.mode!=='review') return; autoSaveDesign(true); D.prop.idx=D.prop.order.indexOf(i); openDesign(SEGS[i]); });
   const rv=$('bb-review'); if(rv&&ready) rv.onclick=()=>setMode('review'); if(typeof updateLiveScore==='function'){ updateLiveScore.key=''; updateLiveScore(); } }   // the label was just re-rendered: refill the live number
 // ── what the screen shows: the existing street to verify, the design, or the review ──
-function setMode(m){ D.mode=m; $('screen-design').dataset.mode=m; D.only=m==='verify'?'before':null;
+function setMode(m){
+  // the review is drawn around the proposal's central block, with the plate widened to the whole proposal and the other blocks
+  // taken out of the context (they are built in full instead); leaving it restores the normal plate
+  if(m==='review'){ const cen=reviewCentre(); if(cen!=null&&D.ctx&&cen!==D.ctx.seg.i){ D.pendingReview=true; D.prop.idx=D.prop.order.indexOf(cen); openDesign(SEGS[cen]); return; }
+    CTX_EXCLUDE.clear(); D.prop.order.forEach(i=>{ if(i!==D.ctx.seg.i) CTX_EXCLUDE.add(i); }); D.plateHalf=reviewExtent(); CTX_CACHE.id=null; D.before=false; $('tg-before').classList.remove('on'); }
+  else if(CTX_EXCLUDE.size||D.plateHalf){ CTX_EXCLUDE.clear(); D.plateHalf=0; CTX_CACHE.id=null; T3.zoom=1; }
+  D.mode=m; $('screen-design').dataset.mode=m; D.only=m==='verify'?'before':null; $('side').style.display=m==='review'?'none':'';
   if(m==='verify'){ D.before=true; $('tg-before').classList.add('on'); if(typeof toggleSide==='function') toggleSide(false); if(typeof showSV==='function') showSV(false); }
   else if(typeof toggleSide==='function') toggleSide(true);
-  $('tg-before').style.display=m==='verify'?'none':''; $('tg-anim').style.display=m==='verify'?'none':'';
+  $('tg-before').style.display=(m==='verify'||m==='review')?'none':''; $('tg-anim').style.display=m==='verify'?'none':'';
   $('bverify').style.display=m==='verify'?'':'none'; $('bhead').style.display=m==='design'?'':'none'; $('bcols').style.display=m==='design'?'':'none';
   $('breview').style.display=m==='review'?'':'none'; $('bscore').style.display=m==='review'?'':'none';
   $('bottom').classList.remove('collapsed'); $('btn-collapse').textContent='▾ Hide panel';
@@ -2212,7 +2218,21 @@ function renderDirSelect(){ const sel=$('prop-dir'); const p=curProp(); if(!sel|
 function setPropDir(v){ const p=curProp(); if(!p) return; p.dir=v||null; let n=0;
   Object.values(p.blocks).forEach(rec=>{ const s=SEGS[rec.i]; if(!s||s===D.ctx.seg) return; const c=applyOverrides(segContext(s),rec.x); const opts=generateOptions(c); if(!opts.length) return; const m=(v&&opts.find(x=>x.mode===v&&x.sep===rec.opt.sep))||(v&&opts.find(x=>x.mode===v))||opts[0]; if(m.mode!==rec.opt.mode){ rec.opt=cloneJ(m); rec.done=false; n++; } });
   projChanged(); const s=D.ctx.seg; openDesign(s); toast(v?(DIR_NAME[v]+' for the whole proposal'+(n?' · '+n+' other block'+(n===1?'':'s')+' re-solved, confirm them again':'')):'Lane direction left to each block'); }
-function stepDone(){ autoSaveDesign(true); const p=curProp(); showMap(); if(p) showPropCard(p); }
+function stepDone(){ autoSaveDesign(true); const p=curProp(); setMode('design'); showMap(); if(p) showPropCard(p); }
+// ── the review's drawings: the whole proposal ──
+function reviewBlocks(){ const p=curProp(); if(!p||!D.ctx) return []; return D.prop.order.filter(i=>i!==D.ctx.seg.i).map(i=>({s:SEGS[i], rec:p.blocks[i]})).filter(b=>b.s&&b.rec&&b.rec.opt); }
+function reviewCentre(){ const p=curProp(); if(!p) return null; const mids=D.prop.order.map(i=>{ const m=polyMid(SEGS[i].g); return {i, m}; }); const cx=mids.reduce((a,b)=>a+b.m[0],0)/mids.length, cy=mids.reduce((a,b)=>a+b.m[1],0)/mids.length; return mids.sort((a,b)=>Math.hypot(a.m[0]-cx,a.m[1]-cy)-Math.hypot(b.m[0]-cx,b.m[1]-cy))[0].i; }
+function reviewExtent(){ if(!D.ctx) return 0; const F=localFrame(D.ctx.seg); const LEN=D.ctx.seg.len; let h=0, x0=Infinity,x1=-Infinity,z0=Infinity,z1=-Infinity; D.prop.order.forEach(i=>{ SEGS[i].g.forEach(([x,y])=>{ const [lx,lz]=F.toLocal(x,y); h=Math.max(h, Math.abs(lx)+80, Math.abs(lz-LEN/2)+80); x0=Math.min(x0,lx); x1=Math.max(x1,lx); z0=Math.min(z0,lz); z1=Math.max(z1,lz); }); });
+  D.reviewBox={cx:(x0+x1)/2, cz:(z0+z1)/2, size:Math.max(x1-x0, z1-z0, 60)+50};   // the proposal's footprint in this block's frame, for the 3D camera
+  return Math.min(900, h); }
+// ── export: a self-contained report (plan and 3D view as images, the blocks, the score and statistics) ──
+async function exportReview(){ const p=curProp(); if(!p) return; toast('Preparing the report…', 6000); const S=propStats(p); const prev=D.view; const settle=()=>new Promise(r=>requestAnimationFrame(()=>setTimeout(r,80)));
+  setView('plan'); await settle(); await settle(); const plan=$('plan-a').toDataURL('image/png'); setView('3d'); await settle(); await settle(); render3D(); const three=T3.renderer.domElement.toDataURL('image/png'); if(prev!==D.view) setView(prev);
+  const order=propOrder(p); const rows=order.map((s,i)=>{ const r=p.blocks[s.i]; return `<tr><td>${i+1}</td><td>${esc(titleCase(s.n))}</td><td>${s.len} m</td><td>${r.opt&&SEP[r.opt.sep]?SEP[r.opt.sep].name:''}</td><td>${r.opt?(DIR_NAME[r.opt.mode]||r.opt.mode):''}</td><td>${r.verified?'yes':'no'}</td><td>${r.done?'yes':'no'}</td></tr>`; }).join('');
+  const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(p.name)} · Bikeway proposal</title><style>body{font:14px/1.5 system-ui,Segoe UI,Arial,sans-serif;color:#1c1c1c;max-width:1100px;margin:24px auto;padding:0 16px}h1{font-size:22px;margin:0}h2{font-size:16px;margin:24px 0 8px}img{width:100%;border:1px solid #ddd;border-radius:6px}table{border-collapse:collapse;font-size:13px;width:100%}td,th{border:1px solid #ddd;padding:4px 8px;text-align:left}.muted{color:#666}.small{font-size:12px}.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:8px 0}.kv>div{border:1px solid #eee;border-radius:6px;padding:6px 8px}.kv b{display:block;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em}.msg{padding:8px 10px;border-radius:6px;background:#f6f6f4;margin:6px 0}.label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#666;margin-top:14px}.scorebox{display:flex;gap:12px;align-items:center;border:1px solid #ddd;border-radius:8px;padding:10px;margin:10px 0}.scorebox .num{font-size:34px;font-weight:700}.stats-photos,.sc{display:none}a{color:#1b7f5f}@media print{body{max-width:none;margin:0}img{break-inside:avoid}}</style></head><body><h1>${esc(p.name)}</h1><div class="muted">Vancouver Bikeway Designer · exported ${new Date().toLocaleString()} · ${order.length} block${order.length===1?'':'s'} · ${(propLen(p)/1000).toFixed(2)} km · lane direction: ${p.dir?DIR_NAME[p.dir]:'as solved'}</div>
+  <h2>Proposed plan</h2><img src="${plan}" alt="Plan of the proposal"><h2>Proposed 3D view</h2><img src="${three}" alt="3D view of the proposal"><h2>Blocks</h2><table><tr><th>#</th><th>Block</th><th>Length</th><th>Separation</th><th>Direction</th><th>Verified</th><th>Designed</th></tr>${rows}</table>
+  <h2>Bike score and statistics</h2>${scoreBoxHTML(S,'box').replace(/<button[\s\S]*?<\/button>/,'')}${statsHTML(p,S)}<p class="muted small">Existing network from City of Vancouver Open Data; design rules from the Engineering Design Manual (2026) and the Rapid Implementation Guide; bike score after Walk Score's Bike Score (bike lanes, hills, destinations), see the tool's methodology page.</p></body></html>`;
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([html],{type:'text/html'})); a.download=(p.name||'proposal').replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-')+'.review.html'; a.click(); toast('Report saved as '+a.download, 4000); }
 // this option's separation and direction on every other block of the proposal, each solved for its own width (the nearest
 // separation its case allows); those blocks go back to "verified, design to confirm"
 function applyToAll(){ const p=curProp(); const o=curOpt(); if(!p||!o) return; autoSaveDesign(true); let n2=0, near=0; const rank=s=>SEP_RANK[s]||0;
@@ -2221,7 +2241,7 @@ function applyToAll(){ const p=curProp(); const o=curOpt(); if(!p||!o) return; a
     if(m.sep!==o.sep) near++; p.blocks[i]={i, opt:cloneJ(m), x:ctxOverrides(c), auto:false, verified:!!(rec&&rec.verified), done:false}; n2++; });
   p.dir=o.mode; projChanged(); renderBlockBar(); renderDirSelect(); toast(SEP[o.sep].name.split(' (')[0]+' · '+DIR_NAME[o.mode]+' applied to '+n2+' other block'+(n2===1?'':'s')+(near?' ('+near+' took the nearest separation their case allows)':'')+' — confirm each on its tab', 4500); }
 (function bindSteps(){ const on=(id,f)=>{ const el=$(id); if(el) el.onclick=f; };
-  on('bv-ok',verifyBlock); on('bh-confirm',confirmDesign); on('br-done',stepDone); on('apply-all',applyToAll);
+  on('bv-ok',verifyBlock); on('bh-confirm',confirmDesign); on('br-done',stepDone); on('apply-all',applyToAll); on('br-blocks',()=>setMode('design')); on('br-export',exportReview);
   const sel=$('prop-dir'); if(sel) sel.onchange=()=>setPropDir(sel.value); })();
 // kept for callers: the navigator is the block bar now
 function renderPropNav(){ renderBlockBar(); }
@@ -2332,7 +2352,7 @@ function sceneCtx(els){ const c=D.ctx; const total=layout(els); const xL=els[0].
   const CTXW=22;                                   // how far beyond the property line we show
   const sceneXL=xL-CTXW, sceneXR=xR+CTXW;
   // real building footprints near the block, in its local frame
-  const C=cityContext(c.seg, Math.max(LEN,140)*1.5);
+  const C=cityContext(c.seg, Math.max(LEN,140,D.plateHalf||0)*1.5);
   const frontage=sd=>{ const near=C.blds.filter(b=>{ const [bx,bz]=b.c; return bz>-8&&bz<LEN+8 && (sd==='L'? bx<xL+1 : bx>xR-1) && Math.abs(bx)<Math.abs(xL)+40; });
     if(!near.length) return {has:false, sb:6, h:0};
     const sbs=near.map(b=>Math.min(...b.p.map(q=>Math.abs(q[0])))-Math.abs(sd==='L'?xL:xR)).map(v=>Math.max(0,v)).sort((a,b)=>a-b);
@@ -2389,7 +2409,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     ctx.fillStyle='#D6DDC6'; path(ring); ctx.fill();
     ctx.strokeStyle='#A9ABA9'; ctx.lineWidth=w*S; ctx.lineJoin='round'; path(ring); ctx.stroke();
     ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.light; [-w/2,w/2].forEach(off=>{ const o=offsetLine([...ring,ring[1]],off).slice(0,ring.length); path(o); ctx.stroke(); }); };
-  if (D.city) { const C=cityContext(c.seg, Math.max(LEN,140)*1.5);
+  if (D.city) { const C=cityContext(c.seg, Math.max(LEN,140,D.plateHalf||0)*1.5);
     // ── city context: black & white; only the proposed block carries colour ──
     ctx.fillStyle='#D7E2E8'; ctx.fillRect(X(sceneXL-3000),Y(LEN+3000),6000*S,6000*S);       // water (near-grey blue)
     ctx.fillStyle='#F6F5F2'; C.water.forEach(r=>{ ctx.beginPath(); r.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.closePath(); ctx.fill(); });
@@ -2468,8 +2488,15 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     C.bikePaths.forEach(p=>pathP(p.g,p.d==='OW'?2.0:3.0,{des:p.sub==='OSB'||p.t==='Protected Bike Lanes',ow:p.d==='OW'}));   // City pieces with no OSM path and no street: same path language
     hostedLanes(C.bikeHosted.filter(h=>!h.st.up));
     // v3: the other blocks of the proposal, with their proposed lanes and buffers, so the plan shows the whole proposal (not in the before view)
-    if(!opts.before&&C.propLanes) C.propLanes.forEach(pl=>{ pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2); if(el.k==='bike') poly(cg, el.w, 'rgba(105,160,120,.9)'); else poly(cg, el.w, el.sep&&SEP[el.sep]&&(SEP[el.sep].bufKind==='paint'||SEP[el.sep].bufKind==='painted')?'rgba(190,190,186,.8)':'#CFCCC4'); });
-      pl.els.filter(el=>el.k==='bike').forEach(el=>{ [el.x, el.x+el.w].forEach(x=>poly(offsetLine(pl.g,x),0.08,'rgba(40,40,40,.55)')); }); });
+    // v3: in the review every designed block is drawn in full — sidewalks, parking with cars, travel lanes with their markings, lanes and buffers
+    const carRot=(cx,cz,ang,col)=>{ const w=1.75,l=4.2; ctx.save(); ctx.translate(X(cx),Y(cz)); ctx.rotate(ang); ctx.fillStyle=col; ctx.strokeStyle='rgba(40,40,40,.55)'; ctx.lineWidth=LWT.hair; ctx.beginPath(); const r=.35*S; if(ctx.roundRect) ctx.roundRect(-w/2*S,-l/2*S,w*S,l*S,r); else ctx.rect(-w/2*S,-l/2*S,w*S,l*S); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(60,70,85,.75)'; ctx.fillRect((-w/2+.2)*S,(-l/2+.4)*S,(w-.4)*S,.5*S); ctx.fillRect((-w/2+.2)*S,(-l/2+1.2)*S,(w-.4)*S,1*S); ctx.restore(); };
+    if(!opts.before&&C.propLanes) C.propLanes.forEach(pl=>{ const full=D.mode==='review'&&pl.all; const list=full?pl.all:pl.els;
+      if(full){ pl.all.forEach(el=>{ const col=el.k==='sw'?'#DBD8D0':el.k==='park'?'#A5A7A6':el.k==='travel'?'#9EA09F':null; if(col) poly(offsetLine(pl.g, el.x+el.w/2), el.w, col); });
+        const sw=pl.all.filter(e=>e.k==='sw'); if(sw.length>=2) [sw[0].x+sw[0].w, sw[sw.length-1].x].forEach(x=>poly(offsetLine(pl.g,x),0.14,'rgba(40,40,40,.6)'));
+        const tr=pl.all.filter(e=>e.k==='travel'); for(let i=1;i<tr.length;i++){ const a=tr[i-1], b=tr[i]; const centre=a.side!==b.side; poly(offsetLine(pl.g,b.x),0.12,centre?'rgba(255,214,0,.85)':'rgba(255,255,255,.85)',centre?null:[2,3.5]); }
+        pl.all.filter(e=>e.k==='park').forEach(e=>{ alongLine(offsetLine(pl.g,e.x+e.w/2),6.5,3).forEach(([x,z,ux,uz],i)=>{ if(i%3===2) return; carRot(x,z,Math.atan2(ux,uz),'#C9CBCF'); }); }); }
+      list.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2); if(el.k==='bike') poly(cg, el.w, 'rgba(105,160,120,.9)'); else if(el.k==='buf') poly(cg, el.w, el.sep&&SEP[el.sep]&&(SEP[el.sep].bufKind==='paint'||SEP[el.sep].bufKind==='painted')?'rgba(190,190,186,.8)':'#CFCCC4'); });
+      list.filter(el=>el.k==='bike').forEach(el=>{ [el.x, el.x+el.w].forEach(x=>poly(offsetLine(pl.g,x),0.08,'rgba(40,40,40,.55)')); }); });
     // v2: a structure that passes OVER the block (a ramp above a street being designed) is drawn after the proposal, with its
     // shadow falling on it, so the plan reads the right way up; decks at the block's own level (or elsewhere) are drawn now
     const bh=z=>S_.prof[0]+(S_.prof[1]-S_.prof[0])*z/LEN;
@@ -2748,7 +2775,7 @@ function drawSectionTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||can
   // haze
   canvas._box=[X(sceneXL),padT,X(sceneXR),ground+130*dpr];
   if (D.city) { // distant context: buildings across the intersection, flat and pale, from the 2015 footprints in the block's frame
-    const C=cityContext(c.seg, Math.max(c.seg.len,140)*1.5); ctx.fillStyle='#E9E8E3';
+    const C=cityContext(c.seg, Math.max(c.seg.len,140,D.plateHalf||0)*1.5); ctx.fillStyle='#E9E8E3';
     C.blds.filter(b=>b.c[1]>c.seg.len+2 && b.c[1]<c.seg.len+260).sort((a,b)=>b.c[1]-a.c[1]).forEach(b=>{ const f=1-(b.c[1]-c.seg.len)/300; const xs=b.p.map(q=>q[0]); const w=Math.max(...xs)-Math.min(...xs); if(Math.abs(b.c[0])>(xR-xL)*3) return; ctx.fillStyle=`rgba(215,216,212,${.25+.45*f})`; ctx.fillRect(X(Math.min(...xs)),Yh(b.h*f),w*S,b.h*f*S-.15*S); });
   }
   // ground slab + surfaces
@@ -2879,18 +2906,27 @@ function build3D(){ init3D(); const o=curOpt(); if(!o) return; ['before','after'
   if (T3.groups.city) T3.scene.remove(T3.groups.city);
   T3.groups.city = D.city ? buildCity() : new THREE.Group(); T3.scene.add(T3.groups.city);
   T3.groups.before=buildStreet(D.beforeEls,true); T3.groups.after=buildStreet(o.els,false); T3.scene.add(T3.groups.before, T3.groups.after);
+  // v3: the review — every other designed block of the proposal built in full (its own cross-section, cars, posts, trees) in its own
+  // frame and placed into this block's frame, so the whole proposal reads as designed streets
+  if(T3.groups.others){ T3.scene.remove(T3.groups.others); T3.groups.others=null; }
+  if(D.mode==='review'&&typeof reviewBlocks==='function'){ const og=new THREE.Group(); const F=sceneCtx(o.els).C.F; const save=D.ctx; T3.other=true;
+    reviewBlocks().forEach(({s,rec})=>{ try{ if(rec.x&&'fac' in rec.x&&typeof setUserFacility==='function') setUserFacility(s,rec.x.fac); D.ctx=applyOverrides(segContext(s),rec.x); const els=cloneJ(rec.opt.els); layout(els); const gr=buildStreet(els,false); gr.position.y=Y.block;
+        const FB=localFrame(s); const p0=F.toLocal(...FB.toWorld(0,0)), p1=F.toLocal(...FB.toWorld(0,10)); const w=new THREE.Group(); w.add(gr); w.position.set(p0[0],0,p0[1]); w.rotation.y=Math.atan2(p1[0]-p0[0],p1[1]-p0[1]); og.add(w); }catch(e){ console.warn('review block', s&&s.n, e); } });
+    T3.other=false; D.ctx=save; CTX_CACHE.id=null; T3.groups.others=og; T3.scene.add(og); }
   // v2: a block on a structure rides the existing surface: it starts at its near-end deck height and runs as one grade to the far
   // end (a ramp block slopes), a hair above the context deck it may share — no step where it meets the decks around it
   const S_=sceneCtx(o.els); const [h0,h1]=S_.prof||[0,0]; const slope=(h1-h0)/S_.LEN;
   [T3.groups.before,T3.groups.after].forEach(gr=>{ gr.rotation.x = (TOPO_OFF ? 0 : -Math.atan(D.ctx.grade)) - Math.atan(slope); gr.position.y = Y.block + h0 + ((h0||h1)?0.03:0); });
-  T3.extent={w:S_.sceneXR-S_.sceneXL, len:S_.LEN}; T3.target=new THREE.Vector3(0,0,S_.LEN/2); T3.sun.target.position.copy(T3.target); T3.sun.target.updateMatrixWorld(); updateCam(); render3D(); }
+  T3.extent={w:S_.sceneXR-S_.sceneXL, len:S_.LEN}; T3.target=new THREE.Vector3(0,0,S_.LEN/2);
+  if(D.mode==='review'&&D.reviewBox){ const b=D.reviewBox; T3.target=new THREE.Vector3(b.cx,0,b.cz); T3.zoom=clamp(Math.max(T3.extent.len*0.75,T3.extent.w*1.6)/(b.size*1.1),0.18,12); }   // frame the whole proposal (its footprint, not the scene objects)
+  T3.sun.target.position.copy(T3.target); T3.sun.target.updateMatrixWorld(); updateCam(); render3D(); }
 
 // city-wide context around the block: land, surrounding streets, buildings, existing bikeways (block's local frame)
 let TZ0=0;
 // The context is a square site model: HALF metres each way from the block centre, with a visible slab edge. Everything
 // (streets, markings, bikeways, buildings, water) is clipped to that square so the model has one clear boundary.
 // plate half-size: always contains the block, grows gently for long merged blocks
-function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.len; const HALF=Math.max(320, LEN*0.6+80); const R=HALF*1.5; const C=cityContext(c.seg, R); const S_=sceneCtx(curOpt().els);
+function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.len; const HALF=Math.max(320, LEN*0.6+80, D.plateHalf||0); /* v3: the review plate spans the whole proposal */ const R=HALF*1.5; const C=cityContext(c.seg, R); const S_=sceneCtx(curOpt().els);
   const F=C.F, ez=(lx,lz)=>{ const [wx,wy]=F.toWorld(lx,lz); return elevAt(wx,wy)-TZ0; };
   const BOX={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF}; const inBox=(x,z)=>x>=BOX.x0&&x<=BOX.x1&&z>=BOX.z0&&z<=BOX.z1;
   // ── ground: a flat plate (topography off), cut along the shoreline polygon; off-land vertices drop below the water
@@ -3029,7 +3065,7 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   // existing street trees on every surrounding street (public-trees), instanced so a thousand trees stay one draw call each
   // v3: the other blocks of the proposal with their lanes and buffers — in a group of their own, shown in the proposed view only
   { const pg=new THREE.Group(); const QB=new Quads(mqc('bike')), QW=new Quads(mqc('white')); const yP=(x,z)=>yRoad(x,z)+0.004; ribbon.target=pg;
-    (C.propLanes||[]).forEach(pl=>{ if(!inR(pl.g)) return; pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2);
+    (D.mode==='review'?[]:(C.propLanes||[])).forEach(pl=>{ if(!inR(pl.g)) return; pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2);   // v3: in the review the other blocks are built in full (build3D)
       if(el.k==='bike'){ clipPoly(cg,BOX).forEach(p=>QB.line(p,el.w,yP)); [el.x,el.x+el.w].forEach(x=>clipPoly(offsetLine(pl.g,x),BOX).forEach(p=>QW.line(p,0.1,yP))); }
       else strip(cg, el.w, M.ctxBuf, Y.walk, Math.max(0.05,el.h||0.15)); }); });
     ribbon.target=null; QB.mesh(pg); QW.mesh(pg); g.add(pg); T3.propCtx=pg; }
@@ -3073,8 +3109,8 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
   const DH=S_.deckH||0; const PR=S_.prof||[0,0]; if(DH>0){ const MD=MAT(0xC4C6C8); box(xR-xL+0.6,1.4,LEN,MD,xL-0.3,-1.75,0,g); for(let z=12;z<LEN-4;z+=24){ const hz=PR[0]+(PR[1]-PR[0])*z/LEN; if(hz>2.4) [xL+1.8,xR-1.8].forEach(px=>cyl(0.5,hz-1.7,MD,px,-hz,z,g,12)); }
     if(!S_.host) [xL,xR-0.3].forEach(px=>box(0.3,1.4,zS1-zS0,M.curb,px,0.1,zS0,g)); }
   // real footprints fronting this block, extruded at their LiDAR height (flagged ones in a warmer tone; on the true ground when the block is on a deck)
-  const HALF=Math.max(320, LEN*0.6+80), BOXB={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF};   // v3: frontages stay inside the site plate, and near the block
-  S_.C.blds.forEach(b=>{ if(b.c[1]<-20||b.c[1]>LEN+20) return; if(Math.abs(b.c[0])<Math.abs(xL)-1||Math.abs(b.c[0])>Math.abs(xL)+60) return; if(!b.p.every(([x,z])=>x>=BOXB.x0&&x<=BOXB.x1&&z>=BOXB.z0&&z<=BOXB.z1)) return;
+  const HALF=Math.max(320, LEN*0.6+80, D.plateHalf||0), BOXB={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF};   // v3: frontages stay inside the site plate, and near the block
+  (T3.other?[]:S_.C.blds).forEach(b=>{ if(b.c[1]<-20||b.c[1]>LEN+20) return; if(Math.abs(b.c[0])<Math.abs(xL)-1||Math.abs(b.c[0])>Math.abs(xL)+60) return; if(!b.p.every(([x,z])=>x>=BOXB.x0&&x<=BOXB.x1&&z>=BOXB.z0&&z<=BOXB.z1)) return;
     const sh=new THREE.Shape(b.p.map(([x,z])=>new THREE.Vector2(x,-z)));
     const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:Math.max(b.h,3),bevelEnabled:false}), b.f?M.bldNoH:M.bld);
     const [bwx,bwy]=S_.C.F.toWorld(b.c[0],b.c[1]); m.rotation.x=-Math.PI/2; m.position.y=elevAt(bwx,bwy)-TZ0-Math.tan(Math.atan(D.ctx.grade))*b.c[1]+Y.ground-DH; m.castShadow=m.receiveShadow=true; g.add(m); outline(m,g); });

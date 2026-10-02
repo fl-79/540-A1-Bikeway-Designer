@@ -73,18 +73,27 @@ function build3D(){ init3D(); const o=curOpt(); if(!o) return; ['before','after'
   if (T3.groups.city) T3.scene.remove(T3.groups.city);
   T3.groups.city = D.city ? buildCity() : new THREE.Group(); T3.scene.add(T3.groups.city);
   T3.groups.before=buildStreet(D.beforeEls,true); T3.groups.after=buildStreet(o.els,false); T3.scene.add(T3.groups.before, T3.groups.after);
+  // v3: the review — every other designed block of the proposal built in full (its own cross-section, cars, posts, trees) in its own
+  // frame and placed into this block's frame, so the whole proposal reads as designed streets
+  if(T3.groups.others){ T3.scene.remove(T3.groups.others); T3.groups.others=null; }
+  if(D.mode==='review'&&typeof reviewBlocks==='function'){ const og=new THREE.Group(); const F=sceneCtx(o.els).C.F; const save=D.ctx; T3.other=true;
+    reviewBlocks().forEach(({s,rec})=>{ try{ if(rec.x&&'fac' in rec.x&&typeof setUserFacility==='function') setUserFacility(s,rec.x.fac); D.ctx=applyOverrides(segContext(s),rec.x); const els=cloneJ(rec.opt.els); layout(els); const gr=buildStreet(els,false); gr.position.y=Y.block;
+        const FB=localFrame(s); const p0=F.toLocal(...FB.toWorld(0,0)), p1=F.toLocal(...FB.toWorld(0,10)); const w=new THREE.Group(); w.add(gr); w.position.set(p0[0],0,p0[1]); w.rotation.y=Math.atan2(p1[0]-p0[0],p1[1]-p0[1]); og.add(w); }catch(e){ console.warn('review block', s&&s.n, e); } });
+    T3.other=false; D.ctx=save; CTX_CACHE.id=null; T3.groups.others=og; T3.scene.add(og); }
   // v2: a block on a structure rides the existing surface: it starts at its near-end deck height and runs as one grade to the far
   // end (a ramp block slopes), a hair above the context deck it may share — no step where it meets the decks around it
   const S_=sceneCtx(o.els); const [h0,h1]=S_.prof||[0,0]; const slope=(h1-h0)/S_.LEN;
   [T3.groups.before,T3.groups.after].forEach(gr=>{ gr.rotation.x = (TOPO_OFF ? 0 : -Math.atan(D.ctx.grade)) - Math.atan(slope); gr.position.y = Y.block + h0 + ((h0||h1)?0.03:0); });
-  T3.extent={w:S_.sceneXR-S_.sceneXL, len:S_.LEN}; T3.target=new THREE.Vector3(0,0,S_.LEN/2); T3.sun.target.position.copy(T3.target); T3.sun.target.updateMatrixWorld(); updateCam(); render3D(); }
+  T3.extent={w:S_.sceneXR-S_.sceneXL, len:S_.LEN}; T3.target=new THREE.Vector3(0,0,S_.LEN/2);
+  if(D.mode==='review'&&D.reviewBox){ const b=D.reviewBox; T3.target=new THREE.Vector3(b.cx,0,b.cz); T3.zoom=clamp(Math.max(T3.extent.len*0.75,T3.extent.w*1.6)/(b.size*1.1),0.18,12); }   // frame the whole proposal (its footprint, not the scene objects)
+  T3.sun.target.position.copy(T3.target); T3.sun.target.updateMatrixWorld(); updateCam(); render3D(); }
 
 // city-wide context around the block: land, surrounding streets, buildings, existing bikeways (block's local frame)
 let TZ0=0;
 // The context is a square site model: HALF metres each way from the block centre, with a visible slab edge. Everything
 // (streets, markings, bikeways, buildings, water) is clipped to that square so the model has one clear boundary.
 // plate half-size: always contains the block, grows gently for long merged blocks
-function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.len; const HALF=Math.max(320, LEN*0.6+80); const R=HALF*1.5; const C=cityContext(c.seg, R); const S_=sceneCtx(curOpt().els);
+function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.len; const HALF=Math.max(320, LEN*0.6+80, D.plateHalf||0); /* v3: the review plate spans the whole proposal */ const R=HALF*1.5; const C=cityContext(c.seg, R); const S_=sceneCtx(curOpt().els);
   const F=C.F, ez=(lx,lz)=>{ const [wx,wy]=F.toWorld(lx,lz); return elevAt(wx,wy)-TZ0; };
   const BOX={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF}; const inBox=(x,z)=>x>=BOX.x0&&x<=BOX.x1&&z>=BOX.z0&&z<=BOX.z1;
   // ── ground: a flat plate (topography off), cut along the shoreline polygon; off-land vertices drop below the water
@@ -223,7 +232,7 @@ function buildCity(){ const g=new THREE.Group(); const c=D.ctx; const LEN=c.seg.
   // existing street trees on every surrounding street (public-trees), instanced so a thousand trees stay one draw call each
   // v3: the other blocks of the proposal with their lanes and buffers — in a group of their own, shown in the proposed view only
   { const pg=new THREE.Group(); const QB=new Quads(mqc('bike')), QW=new Quads(mqc('white')); const yP=(x,z)=>yRoad(x,z)+0.004; ribbon.target=pg;
-    (C.propLanes||[]).forEach(pl=>{ if(!inR(pl.g)) return; pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2);
+    (D.mode==='review'?[]:(C.propLanes||[])).forEach(pl=>{ if(!inR(pl.g)) return; pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2);   // v3: in the review the other blocks are built in full (build3D)
       if(el.k==='bike'){ clipPoly(cg,BOX).forEach(p=>QB.line(p,el.w,yP)); [el.x,el.x+el.w].forEach(x=>clipPoly(offsetLine(pl.g,x),BOX).forEach(p=>QW.line(p,0.1,yP))); }
       else strip(cg, el.w, M.ctxBuf, Y.walk, Math.max(0.05,el.h||0.15)); }); });
     ribbon.target=null; QB.mesh(pg); QW.mesh(pg); g.add(pg); T3.propCtx=pg; }
@@ -267,8 +276,8 @@ function buildStreet(els, before){ const g=new THREE.Group(); const S_=sceneCtx(
   const DH=S_.deckH||0; const PR=S_.prof||[0,0]; if(DH>0){ const MD=MAT(0xC4C6C8); box(xR-xL+0.6,1.4,LEN,MD,xL-0.3,-1.75,0,g); for(let z=12;z<LEN-4;z+=24){ const hz=PR[0]+(PR[1]-PR[0])*z/LEN; if(hz>2.4) [xL+1.8,xR-1.8].forEach(px=>cyl(0.5,hz-1.7,MD,px,-hz,z,g,12)); }
     if(!S_.host) [xL,xR-0.3].forEach(px=>box(0.3,1.4,zS1-zS0,M.curb,px,0.1,zS0,g)); }
   // real footprints fronting this block, extruded at their LiDAR height (flagged ones in a warmer tone; on the true ground when the block is on a deck)
-  const HALF=Math.max(320, LEN*0.6+80), BOXB={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF};   // v3: frontages stay inside the site plate, and near the block
-  S_.C.blds.forEach(b=>{ if(b.c[1]<-20||b.c[1]>LEN+20) return; if(Math.abs(b.c[0])<Math.abs(xL)-1||Math.abs(b.c[0])>Math.abs(xL)+60) return; if(!b.p.every(([x,z])=>x>=BOXB.x0&&x<=BOXB.x1&&z>=BOXB.z0&&z<=BOXB.z1)) return;
+  const HALF=Math.max(320, LEN*0.6+80, D.plateHalf||0), BOXB={x0:-HALF, x1:HALF, z0:LEN/2-HALF, z1:LEN/2+HALF};   // v3: frontages stay inside the site plate, and near the block
+  (T3.other?[]:S_.C.blds).forEach(b=>{ if(b.c[1]<-20||b.c[1]>LEN+20) return; if(Math.abs(b.c[0])<Math.abs(xL)-1||Math.abs(b.c[0])>Math.abs(xL)+60) return; if(!b.p.every(([x,z])=>x>=BOXB.x0&&x<=BOXB.x1&&z>=BOXB.z0&&z<=BOXB.z1)) return;
     const sh=new THREE.Shape(b.p.map(([x,z])=>new THREE.Vector2(x,-z)));
     const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:Math.max(b.h,3),bevelEnabled:false}), b.f?M.bldNoH:M.bld);
     const [bwx,bwy]=S_.C.F.toWorld(b.c[0],b.c[1]); m.rotation.x=-Math.PI/2; m.position.y=elevAt(bwx,bwy)-TZ0-Math.tan(Math.atan(D.ctx.grade))*b.c[1]+Y.ground-DH; m.castShadow=m.receiveShadow=true; g.add(m); outline(m,g); });

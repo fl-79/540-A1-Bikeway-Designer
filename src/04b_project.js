@@ -37,8 +37,8 @@ function propStore(s, opt, c){ const p=propOf(s.i)||activeProp()||newProposal();
 function proposalContextLanes(s,F,near){ const p=propOf(s.i); if(!p||p.hidden) return []; const out=[];
   Object.values(p.blocks).forEach(rec=>{ if(rec.i===s.i) return; const o=SEGS[rec.i]; if(!o||!o.g.some(near)) return; const opt=rec.opt; if(!opt||opt.sep==='shared') return;
     const laid=cloneJ(opt.els); layout(laid);   // x positions come from the layout (stored options carry widths only)
-    const els=laid.filter(e=>e.k==='bike'||e.k==='buf').map(e=>({k:e.k, x:e.x, w:e.w, h:e.h||0, sep:e.sep, two:!!e.two}));
-    if(els.length) out.push({s:o, name:o.n, g:smoothLine(o.g).map(q=>F.toLocal(q[0],q[1])), els, ctc:rec.x?rec.x.ctc:o.ctc, designed:!rec.auto}); });
+    const all=laid.map(e=>({k:e.k, x:e.x, w:e.w, h:e.h||0, sep:e.sep, two:!!e.two, side:e.side})); const els=all.filter(e=>e.k==='bike'||e.k==='buf');   // v3: the review draws the whole cross-section (all)
+    if(els.length||D.mode==='review') out.push({s:o, name:o.n, g:smoothLine(o.g).map(q=>F.toLocal(q[0],q[1])), els, all, ctc:rec.x?rec.x.ctc:o.ctc, designed:!rec.auto}); });
   return out; }
 // ── routing: the shortest street route between two blocks, over blocks that can take a lane ──
 function routeBlocks(a,b){ if(a===b) return [a]; const dist=new Map([[a.i,0]]), prev=new Map(), done=new Set(); const heap=[[0,a.i]];

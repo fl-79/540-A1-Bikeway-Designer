@@ -103,7 +103,7 @@ function sceneCtx(els){ const c=D.ctx; const total=layout(els); const xL=els[0].
   const CTXW=22;                                   // how far beyond the property line we show
   const sceneXL=xL-CTXW, sceneXR=xR+CTXW;
   // real building footprints near the block, in its local frame
-  const C=cityContext(c.seg, Math.max(LEN,140)*1.5);
+  const C=cityContext(c.seg, Math.max(LEN,140,D.plateHalf||0)*1.5);
   const frontage=sd=>{ const near=C.blds.filter(b=>{ const [bx,bz]=b.c; return bz>-8&&bz<LEN+8 && (sd==='L'? bx<xL+1 : bx>xR-1) && Math.abs(bx)<Math.abs(xL)+40; });
     if(!near.length) return {has:false, sb:6, h:0};
     const sbs=near.map(b=>Math.min(...b.p.map(q=>Math.abs(q[0])))-Math.abs(sd==='L'?xL:xR)).map(v=>Math.max(0,v)).sort((a,b)=>a-b);
@@ -160,7 +160,7 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     ctx.fillStyle='#D6DDC6'; path(ring); ctx.fill();
     ctx.strokeStyle='#A9ABA9'; ctx.lineWidth=w*S; ctx.lineJoin='round'; path(ring); ctx.stroke();
     ctx.strokeStyle='rgba(40,40,40,.7)'; ctx.lineWidth=LWT.light; [-w/2,w/2].forEach(off=>{ const o=offsetLine([...ring,ring[1]],off).slice(0,ring.length); path(o); ctx.stroke(); }); };
-  if (D.city) { const C=cityContext(c.seg, Math.max(LEN,140)*1.5);
+  if (D.city) { const C=cityContext(c.seg, Math.max(LEN,140,D.plateHalf||0)*1.5);
     // ── city context: black & white; only the proposed block carries colour ──
     ctx.fillStyle='#D7E2E8'; ctx.fillRect(X(sceneXL-3000),Y(LEN+3000),6000*S,6000*S);       // water (near-grey blue)
     ctx.fillStyle='#F6F5F2'; C.water.forEach(r=>{ ctx.beginPath(); r.forEach(([x,z],i)=>{ i?ctx.lineTo(X(x),Y(z)):ctx.moveTo(X(x),Y(z)); }); ctx.closePath(); ctx.fill(); });
@@ -239,8 +239,15 @@ function drawPlanTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||canvas
     C.bikePaths.forEach(p=>pathP(p.g,p.d==='OW'?2.0:3.0,{des:p.sub==='OSB'||p.t==='Protected Bike Lanes',ow:p.d==='OW'}));   // City pieces with no OSM path and no street: same path language
     hostedLanes(C.bikeHosted.filter(h=>!h.st.up));
     // v3: the other blocks of the proposal, with their proposed lanes and buffers, so the plan shows the whole proposal (not in the before view)
-    if(!opts.before&&C.propLanes) C.propLanes.forEach(pl=>{ pl.els.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2); if(el.k==='bike') poly(cg, el.w, 'rgba(105,160,120,.9)'); else poly(cg, el.w, el.sep&&SEP[el.sep]&&(SEP[el.sep].bufKind==='paint'||SEP[el.sep].bufKind==='painted')?'rgba(190,190,186,.8)':'#CFCCC4'); });
-      pl.els.filter(el=>el.k==='bike').forEach(el=>{ [el.x, el.x+el.w].forEach(x=>poly(offsetLine(pl.g,x),0.08,'rgba(40,40,40,.55)')); }); });
+    // v3: in the review every designed block is drawn in full — sidewalks, parking with cars, travel lanes with their markings, lanes and buffers
+    const carRot=(cx,cz,ang,col)=>{ const w=1.75,l=4.2; ctx.save(); ctx.translate(X(cx),Y(cz)); ctx.rotate(ang); ctx.fillStyle=col; ctx.strokeStyle='rgba(40,40,40,.55)'; ctx.lineWidth=LWT.hair; ctx.beginPath(); const r=.35*S; if(ctx.roundRect) ctx.roundRect(-w/2*S,-l/2*S,w*S,l*S,r); else ctx.rect(-w/2*S,-l/2*S,w*S,l*S); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(60,70,85,.75)'; ctx.fillRect((-w/2+.2)*S,(-l/2+.4)*S,(w-.4)*S,.5*S); ctx.fillRect((-w/2+.2)*S,(-l/2+1.2)*S,(w-.4)*S,1*S); ctx.restore(); };
+    if(!opts.before&&C.propLanes) C.propLanes.forEach(pl=>{ const full=D.mode==='review'&&pl.all; const list=full?pl.all:pl.els;
+      if(full){ pl.all.forEach(el=>{ const col=el.k==='sw'?'#DBD8D0':el.k==='park'?'#A5A7A6':el.k==='travel'?'#9EA09F':null; if(col) poly(offsetLine(pl.g, el.x+el.w/2), el.w, col); });
+        const sw=pl.all.filter(e=>e.k==='sw'); if(sw.length>=2) [sw[0].x+sw[0].w, sw[sw.length-1].x].forEach(x=>poly(offsetLine(pl.g,x),0.14,'rgba(40,40,40,.6)'));
+        const tr=pl.all.filter(e=>e.k==='travel'); for(let i=1;i<tr.length;i++){ const a=tr[i-1], b=tr[i]; const centre=a.side!==b.side; poly(offsetLine(pl.g,b.x),0.12,centre?'rgba(255,214,0,.85)':'rgba(255,255,255,.85)',centre?null:[2,3.5]); }
+        pl.all.filter(e=>e.k==='park').forEach(e=>{ alongLine(offsetLine(pl.g,e.x+e.w/2),6.5,3).forEach(([x,z,ux,uz],i)=>{ if(i%3===2) return; carRot(x,z,Math.atan2(ux,uz),'#C9CBCF'); }); }); }
+      list.forEach(el=>{ const cg=offsetLine(pl.g, el.x+el.w/2); if(el.k==='bike') poly(cg, el.w, 'rgba(105,160,120,.9)'); else if(el.k==='buf') poly(cg, el.w, el.sep&&SEP[el.sep]&&(SEP[el.sep].bufKind==='paint'||SEP[el.sep].bufKind==='painted')?'rgba(190,190,186,.8)':'#CFCCC4'); });
+      list.filter(el=>el.k==='bike').forEach(el=>{ [el.x, el.x+el.w].forEach(x=>poly(offsetLine(pl.g,x),0.08,'rgba(40,40,40,.55)')); }); });
     // v2: a structure that passes OVER the block (a ramp above a street being designed) is drawn after the proposal, with its
     // shadow falling on it, so the plan reads the right way up; decks at the block's own level (or elsewhere) are drawn now
     const bh=z=>S_.prof[0]+(S_.prof[1]-S_.prof[0])*z/LEN;
@@ -519,7 +526,7 @@ function drawSectionTo(canvas, els, opts){ prep(canvas); if(canvas.width<40||can
   // haze
   canvas._box=[X(sceneXL),padT,X(sceneXR),ground+130*dpr];
   if (D.city) { // distant context: buildings across the intersection, flat and pale, from the 2015 footprints in the block's frame
-    const C=cityContext(c.seg, Math.max(c.seg.len,140)*1.5); ctx.fillStyle='#E9E8E3';
+    const C=cityContext(c.seg, Math.max(c.seg.len,140,D.plateHalf||0)*1.5); ctx.fillStyle='#E9E8E3';
     C.blds.filter(b=>b.c[1]>c.seg.len+2 && b.c[1]<c.seg.len+260).sort((a,b)=>b.c[1]-a.c[1]).forEach(b=>{ const f=1-(b.c[1]-c.seg.len)/300; const xs=b.p.map(q=>q[0]); const w=Math.max(...xs)-Math.min(...xs); if(Math.abs(b.c[0])>(xR-xL)*3) return; ctx.fillStyle=`rgba(215,216,212,${.25+.45*f})`; ctx.fillRect(X(Math.min(...xs)),Yh(b.h*f),w*S,b.h*f*S-.15*S); });
   }
   // ground slab + surfaces

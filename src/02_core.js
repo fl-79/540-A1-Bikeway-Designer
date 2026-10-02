@@ -675,7 +675,7 @@ const isStop=e=>e.type==='dead'||e.type==='path';   // the street ends for cars
 function crossWidths(s){ return endInfo(s).map(e=>e.w); }
 
 // ── City context in the block's local frame (x across, z along) ───────────
-const CTX_CACHE={id:null};
+const CTX_CACHE={id:null}; const CTX_EXCLUDE=new Set();   // v3: blocks drawn as full designs in the review are not context streets
 function localFrame(s){ const P0=s.g[0], P1=s.g[s.g.length-1]; const dx=P1[0]-P0[0], dy=P1[1]-P0[1], L=Math.hypot(dx,dy)||1; const u=[dx/L,dy/L];
   return { P0, u, toLocal:(x,y)=>{ const rx=x-P0[0], ry=y-P0[1]; return [ rx*u[1]-ry*u[0], rx*u[0]+ry*u[1] ]; },
            toWorld:(lx,lz)=>[ P0[0] + lz*u[0] + lx*u[1], P0[1] + lz*u[1] - lx*u[0] ],
@@ -764,7 +764,7 @@ function structEdges(st, hw, halfDeck, hwFn){ const g=st.gx||st.g; const ext0=st
     if(nose){ const a0=alongOnPoly(ED,nose)[1], a1=clamp(aB+dirB*60,0,plen(ED)); const lo=Math.min(a0,a1), hi=Math.max(a0,a1); if(hi-lo>4){ const line=[]; for(let t=lo;t<=hi;t+=3) line.push(pointAlong(ED,t)); line.push(pointAlong(ED,hi)); merges.push({line, deck:o}); } }
     if(outerL) Lk=newE; else Rk=newE; L=k?Lk:Lk.slice().reverse(); R=k?Rk:Rk.slice().reverse(); taper=true; });
   return {L,R,taper,merges}; }
-function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CTX_CACHE.v; const F=localFrame(s); const cx=(s.g[0][0]+s.g[s.g.length-1][0])/2, cy=(s.g[0][1]+s.g[s.g.length-1][1])/2;
+function cityContext(s, R){ const exk=[...CTX_EXCLUDE].join(','); if (CTX_CACHE.id===s.i && CTX_CACHE.R===R && CTX_CACHE.ex===exk) return CTX_CACHE.v; const F=localFrame(s); const cx=(s.g[0][0]+s.g[s.g.length-1][0])/2, cy=(s.g[0][1]+s.g[s.g.length-1][1])/2;
   const near=p=>Math.hypot(p[0]-cx,p[1]-cy)<R+200;
   // surrounding streets carry their full record (s) so the renderers can draw existing lanes, direction, parking, signals
   // trim[k]: how far the sidewalk band / curbs stop short of the node at end k (the widest crossing street's half carriageway),
@@ -773,7 +773,7 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
   // and sidewalk on the other side run straight through instead of stopping at a curb line that is not there
   // v2: centrelines are smoothed (curves read as curves); a bridge / viaduct whose right-of-way value is implausibly narrow for
   // its OSM lanes (the Cambie Bridge is recorded at 10.1 m) is widened to its lanes × 3.3 m plus a 1.5 m edge each side
-  const streets=SEGS.filter(o=>o.i!==s.i && o.g.some(near)).map(o=>{ const trimLR=[0,1].map(k=>endSides(o,k,sameLevelCross(o,k))); const trim=trimLR.map(t=>Math.max(t.L,t.R));   // a street passing under a deck keeps its curbs
+  const streets=SEGS.filter(o=>o.i!==s.i && !CTX_EXCLUDE.has(o.i) && o.g.some(near)).map(o=>{ const trimLR=[0,1].map(k=>endSides(o,k,sameLevelCross(o,k))); const trim=trimLR.map(t=>Math.max(t.L,t.R));   // a street passing under a deck keeps its curbs
     const up=isUpSeg(o); const sc=structCtc(o); const rec=(up&&sc!==o.ctc) ? {...o, ctc:sc, row:Math.max(o.row, Math.round((sc+3)*10)/10)} : o;   // v3: structure widths from lanes (structCtc)
     return {row:rec.row,u:o.u,s:o,m:laneModel(rec),g:smoothLine(o.g.map(p=>F.toLocal(p[0],p[1])),2),trim,trimLR,bar:trimLR.map(t=>t.bar),cross:trim.map(t=>t>0),up,lvl:up?((o.osm&&o.osm.ly)||1):0}; });
   // v3: the City's file carries some structure centrelines twice (1300 Howe St, the Granville St approach north of Pacific):
@@ -961,7 +961,7 @@ function cityContext(s, R){ if (CTX_CACHE.id===s.i && CTX_CACHE.R===R) return CT
   // v3: the other blocks of the proposal this block belongs to, with their proposed lanes and buffers (drawn as context so the
   // whole proposal is seen, not one block)
   const propLanes=(typeof proposalContextLanes==='function')?proposalContextLanes(s,F,near):[];
-  const v={streets,bike,bikeHosted,bikeChains,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.v=v; return v; }
+  const v={streets,bike,bikeHosted,bikeChains,blockHost,bikePaths:paths,osmPaths,loops,plazas,blds,water,nodes,F,propLanes,onLand:(x,z)=>{ if(!water.length) return true; return water.some(r=>pointInRing(x,z,r)); }}; CTX_CACHE.id=s.i; CTX_CACHE.R=R; CTX_CACHE.ex=exk; CTX_CACHE.v=v; return v; }
 function pointInRing(x,z,r){ let inside=false; for(let i=0,j=r.length-1;i<r.length;j=i++){ const [xi,zi]=r[i], [xj,zj]=r[j]; if(((zi>z)!==(zj>z)) && (x < (xj-xi)*(z-zi)/((zj-zi)||1e-9)+xi)) inside=!inside; } return inside; }
 
 // ── v2: review export — every block end the tool reads as something special, for checking against Google Maps ──────────

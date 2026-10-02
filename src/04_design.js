@@ -40,7 +40,7 @@ function openDesign(s){
   renderPropNote(); if(typeof renderPropNav==='function') renderPropNav(); if(typeof refreshPhoto==='function') refreshPhoto();
   setView(D.view);
   if(typeof showSV==='function') showSV(false);   // v3: the street-view mini window for checking the existing street
-  if(typeof applyPropDir==='function') applyPropDir(); if(typeof setMode==='function') setMode((rec&&rec.verified)?'design':'verify');   // v3: a block opens on its existing view until verified, then on its design
+  if(typeof applyPropDir==='function') applyPropDir(); if(typeof setMode==='function'){ const m=D.pendingReview?'review':(rec&&rec.verified)?'design':'verify'; D.pendingReview=false; setMode(m); }   // v3: a block opens on its existing view until verified, then on its design (or the review it was opened for)
 }
 // v3: the block's place in the project
 function renderPropNote(){ const s=D.ctx&&D.ctx.seg; if(!s) return; const p=propOf(s.i); const rec=p&&p.blocks[s.i]; $('prop-note').innerHTML=p?`saved as you edit · <b>${esc(p.name)}</b>`:''; }
