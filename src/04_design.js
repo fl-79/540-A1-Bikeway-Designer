@@ -33,6 +33,7 @@ function openDesign(s){
   $('dir-note').textContent = c.dirMode==='two'?'two-way required':c.dirMode==='one'?'one-way each side required':'';
   { const sw=c.swW||RULES.sidewalk; $('sw-note').textContent = lvlOf(s)>0 ? `On a structure: the existing deck sidewalk (${fmt(sw)} m each side) is kept as it is — no sidewalk or boulevard is added; the design fits the existing carriageway.` : `Sidewalk + boulevard fixed at ${fmt(sw)} m each side — property lines cannot change.`; }
   $('x-ctc').value=c.ctc; $('x-lanes').value=c.lanes; $('x-lL').textContent=c.lbl[0]; $('x-lR').textContent=c.lbl[1]; $('x-pL').value=c.park.L?1:0; $('x-pR').value=c.park.R?1:0; $('x-bus').value=c.bus?1:0; $('x-aadt').value=c.aadt==null?'':c.aadt;
+  renderSpeedField(c);   // v4: the posted speed — recorded (OSM / bikeways layer) or the class default, confirmable here
   // show the screen first: the 2D renderers need a laid-out (non-zero) canvas before they can draw
   showDesign(); regenerate();
   if(rec&&!rec.auto){ const k=D.options.findIndex(o=>!o.custom&&o.sep===rec.opt.sep&&o.mode===rec.opt.mode);   // v3: the saved design takes its chip's place (A / B / C stay the options)
@@ -54,6 +55,16 @@ function renderBeforeEdit(){ const box=$('bw-edit'); if(!box||!D.ctx) return; co
   const r=box.querySelector('[data-act=bwreset]'); if(r) r.onclick=e=>{ e.preventDefault(); c.beforeW=null; c.ctc=c.seg.ctc; c.swW=Math.max(1.8,Math.min(8,(c.seg.row-c.ctc)/2)); $('x-ctc').value=c.ctc; regenerate(true); }; }
 ['x-ctc','x-lanes','x-pL','x-pR','x-bus','x-aadt'].forEach(id=>$(id).addEventListener('change',()=>{ const c=D.ctx; if(id!=='x-aadt'&&id!=='x-bus') c.beforeW=null;   // v3: lanes / parking / curb-to-curb changed by hand: back to standard widths
   c.ctc=Math.max(6,+$('x-ctc').value||c.ctc); c.swW=Math.max(1.8,Math.min(8,(c.seg.row-c.ctc)/2)); c.lanes=+$('x-lanes').value; c.park={L:$('x-pL').value==='1',R:$('x-pR').value==='1'}; c.bus=$('x-bus').value==='1'; const a=parseInt($('x-aadt').value,10); c.aadt=isNaN(a)?null:a; regenerate(true); }));
+// v4: the posted speed limit. "As recorded" = OpenStreetMap maxspeed or the City's bikeways layer where they have it; otherwise the
+// class default the tool draws with (Arterial 50, Residential 30), which the traffic-stress rating treats as unknown until confirmed here
+function renderSpeedField(c){ const s=c.seg; const real=typeof ltsSpeed==='function'?ltsSpeed(s):null; $('x-spd').value=c.spdUser?String(c.spdUser):''; $('x-spd').querySelector('option[value=""]').textContent='as recorded ('+(real?real.v+' km/h, '+real.src:s.spd+' km/h class default — not confirmed')+')'; $('x-spdrec').textContent=real?'':'· not in OSM: confirm from the Street View'; }
+$('x-spd').addEventListener('change',()=>{ const c=D.ctx; const v=parseInt($('x-spd').value,10); if(v){ c.spd=v; c.spdUser=v; } else { c.spd=c.seg.spd; c.spdUser=null; } renderSpeedField(c);
+  $('d-tag').innerHTML=$('d-tag').innerHTML.replace(/\d+ km\/h/, c.spd+' km/h'); regenerate(true); });
+// v4: the traffic-stress line of the compliance column (design) and of the verify bar (existing street): before → after with the reasons
+function renderLtsPanel(S){ const box=$('lts-panel'); if(!box||!D.ctx) return; const s=D.ctx.seg; const o=curOpt(); const rec=typeof curRec==='function'?curRec():null; const x={...ctxOverrides(D.ctx), verified:!!(rec&&rec.verified)}; const before=ltsExisting(s,x); const after=o?ltsProposed(s,{opt:o, x}):before;   // the existing state counts as confirmed only once the block is verified
+  const dot=r=>`<span style="color:${LTS_COL[r.hi]};font-weight:700">●</span>`; const drop=before.hi-after.hi;
+  box.innerHTML=`<div class="msg" style="background:#F8FAFC;color:var(--ink2);display:block"><b>Cycling comfort</b> ${dot(before)} ${ltsText(before)} → ${dot(after)} <b>${ltsText(after)}</b> · ${LTS_NAME[after.hi]}${drop>0?` <span style="color:var(--green);font-weight:600">−${drop} level${drop>1?'s':''}</span>`:after.hi>2?' <span style="color:var(--amber)">still above LTS 2</span>':''}<br><span class="small">After: ${esc(ltsWhy(after))}.${after.hi>2&&after.crossNote?' The crossing at the end sets the level: a signal, a median refuge or a raised crossing there would bring it down.':''}${after.lo!==after.hi&&after.unknown.some(u=>!/cross-street/.test(u))?' Confirm the street panel (speed limit, lanes) to close the range.':after.lo!==after.hi?' The range comes from the crossing street, whose speed or lanes are not in the data.':''}</span></div>`;
+  const bv=$('bv-lts'); if(bv) bv.innerHTML=`${dot(before)} <b>Cycling comfort today: ${ltsLabel(before)}</b> — ${esc(ltsWhy(before))}.${before.lo!==before.hi?' Confirming the panel on the left (lanes, parking, speed limit) resolves the range.':''}${typeof crashText==='function'&&crashText(s)?'<br>'+esc(crashText(s)):''}`; }
 function regenerate(keepCustom){
   const custom = keepCustom ? D.options.filter(o=>o.custom) : [];
   D.options=[...generateOptions(D.ctx), ...custom]; D.beforeEls=existingElements(D.ctx); D.cur=0; D.sel=null;   // v2: "before" includes the facility that is there today
@@ -62,7 +73,9 @@ function regenerate(keepCustom){
   renderChips(); renderAll();
 }
 function curOpt(){ return D.options[D.cur]; }
-function renderChips(){ $('opt-chips').innerHTML=D.options.map((o,i)=>`<button class="chip ${i===D.cur?'active':''} ${o.custom?'custom':''}" data-i="${i}" title="${o.title}">${o.id}${o.custom?'':' · '+SEP[o.sep].name.split(' ')[0]}</button>`).join('');
+// v4: chips read "Design 1 · Flex posts"; a saved or iterated design is named as such (the A / B / C ids stay internal)
+function optLabel(o,i){ const pl=SEP[o.sep]?(SEP[o.sep].plain||SEP[o.sep].name):o.sep; return (o.custom?(o.id==='P'?'Saved design':'Iteration '+o.id):'Design '+(i+1))+' · '+pl; }
+function renderChips(){ $('opt-chips').innerHTML=D.options.map((o,i)=>`<button class="chip ${i===D.cur?'active':''} ${o.custom?'custom':''}" data-i="${i}" title="${o.title}">${optLabel(o,i)}</button>`).join('');
   $('opt-chips').querySelectorAll('button').forEach(b=>b.onclick=()=>{ D.cur=+b.dataset.i; D.sel=null; renderChips(); renderAll(); }); }
 $('btn-revert').onclick=()=>{ const o=curOpt(); if(!o) return; if(o.custom){ D.cur=0; } else { const fresh=generateOptions(D.ctx).find(x=>x.id===o.id); if(fresh) D.options[D.cur]=fresh; } D.sel=null; renderChips(); renderAll(); };
 if($('btn-save')) $('btn-save').onclick=()=>{ const o=curOpt(); if(!o) return; const n=D.options.filter(x=>x.custom).length+1; const id=String.fromCharCode(68+n-1); D.options.push({...JSON.parse(JSON.stringify(o)), id, custom:true, title:'Iteration '+n+' ('+o.title+')'}); D.cur=D.options.length-1; renderChips(); renderAll(); };
@@ -149,6 +162,7 @@ function renderPanels(){ const o=curOpt(); if(!o) return; const c=D.ctx;
   if (o.mode==='two' && ((c.ln.L||[]).length+(c.ln.R||[]).length)) cons.push('Two-way operation adds contra-flow conflicts at laneways and intersections');
   $('summary').innerHTML = pros.map(p=>`<p class="pro">${p}</p>`).join('')+cons.map(p=>`<p class="con">${p}</p>`).join('');
   if(typeof updateLiveScore==='function') updateLiveScore();   // v3: the proposal's bike score with this design, live in the panel header
+  if(typeof renderLtsPanel==='function') renderLtsPanel();      // v4: the block's traffic stress before → after this option
 }
 function renderAll(fromEditor){ if(!fromEditor) renderEditor(); else updateBar(); renderPanels(); redrawViews(); if(typeof autoSaveDesign==='function') autoSaveDesign(); }   // v3: the design autosaves to the proposal
 
@@ -171,7 +185,7 @@ function setView(v){ D.view=v; $('c3d').style.display=v==='3d'?'block':'none'; $
   $('tg-anim').style.visibility = v==='sec'?'hidden':'visible';
   $('tg-edit').style.display = v==='3d'?'none':'';   // editing happens in plan and section only; the 3D view is a viewer
   redrawViews(); if(v==='3d') setAnim(D.anim); else stop3D(); anim2D(D.anim&&v==='plan'); }
-function redrawViews(){ const o=curOpt(); if(!o) return; const badge='PROPOSED · OPTION '+o.id; ['b3d','bplan','bsec'].forEach(id=>$(id).textContent=badge);
+function redrawViews(){ const o=curOpt(); if(!o) return; const badge='PROPOSED · '+(o.custom?(o.id==='P'?'SAVED DESIGN':'ITERATION '+o.id):'DESIGN '+(D.cur+1)); ['b3d','bplan','bsec'].forEach(id=>$(id).textContent=badge);
   const onlyB=D.only==='before';
   if (D.view==='plan') { if(D.before||onlyB) drawPlanTo($('plan-b'), D.beforeEls, {before:true}); if(!onlyB) drawPlanTo($('plan-a'), o.els, {shared:o.sep==='shared', editable:o.sep!=='shared'}); }
   else if (D.view==='sec') { if(D.before||onlyB) drawSectionTo($('sec-b'), D.beforeEls, {before:true}); if(!onlyB) drawSectionTo($('sec-a'), o.els, {editable:o.sep!=='shared'}); }

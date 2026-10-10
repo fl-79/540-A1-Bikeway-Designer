@@ -20,10 +20,14 @@ const DIR_NAME={one:'one-way lane each side', two:'two-way lane on one side'};
 // ── the bar: block tabs with their state, the counts, the review tab ──
 function renderBlockBar(){ const el=$('blockbar'); const p=curProp(); if(!el) return; if(!p){ el.innerHTML=''; return; } const order=propOrder(p); const cur=D.ctx&&D.ctx.seg.i; const ready=allDone(p);
   const nv=order.filter(s=>p.blocks[s.i].verified).length, nd=order.filter(s=>p.blocks[s.i].done).length;
-  el.innerHTML=`<span class="bb-name" title="The proposal being designed · its lane direction: ${p.dir?DIR_NAME[p.dir]:'not set yet'}">${esc(p.name)}</span>`
-    +order.map((s,i)=>{ const st=blockState(p.blocks[s.i]); return `<button class="bb ${st} ${s.i===cur&&D.mode!=='review'?'cur':''}" data-i="${s.i}" title="${esc(titleCase(s.n))} · ${st==='done'?'verified and designed':st==='verified'?'verified — confirm the design':'verify the existing street first'}"><i></i><span class="n">${i+1}</span>${esc(titleCase(s.n))}</button>`; }).join('')
-    +`<span class="grow"></span><span class="bb-sum">${nv} of ${order.length} verified · ${nd} of ${order.length} designed</span>`
-    +`<button class="bb review ${ready?'ready':''} ${D.mode==='review'?'cur':''}" id="bb-review" ${ready?'':'disabled'} title="${ready?'The bike score and statistics of the whole proposal':'Greyed until every block is verified and designed'}"><i></i><span id="stp3">Review &amp; score</span></button>`;
+  // v4: folder tabs, one per block, coloured by state (grey to verify · amber verified, design pending · green designed), the current
+  // tab in front; the review is the last tab. The tabs sit on a progress bar (each block counts half for verified, half for designed)
+  const pct=Math.round(100*(nv+nd)/(2*order.length)); const next=order.find(s=>{ const r=p.blocks[s.i]; return !(r&&r.verified&&r.done); });
+  el.innerHTML=`<div class="bbrow"><span class="bb-name" title="The proposal being designed · its lane direction: ${p.dir?DIR_NAME[p.dir]:'not set yet'}">${esc(p.name)}</span>`
+    +order.map((s,i)=>{ const st=blockState(p.blocks[s.i]); const isCur=s.i===cur&&D.mode!=='review'; return `<button class="bb ${st} ${isCur?'cur':''}" data-i="${s.i}" title="${esc(titleCase(s.n))} · ${st==='done'?'verified and designed':st==='verified'?'verified — design to confirm':'existing street to verify'}"><span class="n">${st==='done'?'✓':i+1}</span><span class="t">${esc(titleCase(s.n))}</span><small>${st==='done'?'designed':st==='verified'?'verified':'to verify'}</small></button>`; }).join('')
+    +`<span class="bbgap"></span><button class="bb review ${ready?'ready':''} ${D.mode==='review'?'cur':''}" id="bb-review" ${ready?'':'disabled'} title="${ready?'The bike score and statistics of the whole proposal':'Greyed until every block is verified and designed'}"><span class="n">${ready?'✓':order.length+1}</span><span class="t" id="stp3">Review &amp; score</span></button>`
+    +`<span class="grow"></span><span class="bb-sum">${nd} of ${order.length} designed${next&&!ready?' · next: '+esc(titleCase(next.n)):''}</span></div>`
+    +`<div class="bbprog" title="${nv} of ${order.length} verified, ${nd} of ${order.length} designed"><i style="width:${pct}%"></i></div>`;
   el.querySelectorAll('button[data-i]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(D.ctx&&i===D.ctx.seg.i&&D.mode!=='review') return; autoSaveDesign(true); D.prop.idx=D.prop.order.indexOf(i); openDesign(SEGS[i]); });
   const rv=$('bb-review'); if(rv&&ready) rv.onclick=()=>setMode('review'); if(typeof updateLiveScore==='function'){ updateLiveScore.key=''; updateLiveScore(); } }   // the label was just re-rendered: refill the live number
 // ── what the screen shows: the existing street to verify, the design, or the review ──

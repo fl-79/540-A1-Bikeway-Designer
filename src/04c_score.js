@@ -69,7 +69,8 @@ function propStats(p, extra){ const blocks=propBlocks(p).filter(Boolean); const 
     let cb=0,ca=0,cn=0,up=0; for(let k=0;k<SCORE.n;k++){ if(!SCORE.mask[k]) continue; const b=cellScore(k,null).total, a=cellScore(k,addAll).total; cb+=b; ca+=a; cn++; if(a-b>=1) up++; }   // citywide: every visible proposal
     const others=Object.keys(wmAll).filter(i=>!(i in wm)).length;   // blocks of other visible proposals
     sc={before,after,afterAll,others,cells:cells.size,city:{before:cb/cn,after:ca/cn,cells:cn,up}}; }
-  return {blocks:blocks.length, len, cases, seps, conn:{internal,aaa,exist,other,loose,links}, dest:{n:near.length,byCat}, grade:{max:gmax,mean:gmean,steep,mod,len:gl}, score:sc}; }
+  const lts=typeof ltsPropStats==='function'?ltsPropStats(p, extra&&extra.opt?extra:null):null;   // v4: traffic stress before / after, block by block
+  return {blocks:blocks.length, len, cases, seps, conn:{internal,aaa,exist,other,loose,links}, dest:{n:near.length,byCat}, grade:{max:gmax,mean:gmean,steep,mod,len:gl}, score:sc, lts}; }
 
 // ── the statistics panel ──
 // the statistics as HTML, for the map's panel and for the Score tab of the design screen
@@ -84,6 +85,7 @@ function statsHTML(p, S){ S=S||propStats(p); const km=(S.len/1000).toFixed(2); c
     ${sc&&sc.after?`<div class="sc"><div><b>Bike lanes</b><span>${pc(sc.before.lane)} → ${pc(sc.after.lane)}</span></div><div><b>Hills</b><span>${pc(sc.after.hill)}</span></div><div><b>Destinations</b><span>${pc(sc.after.dest)}</span></div></div>
     <div class="small muted">Mean of the ${sc.cells} grid cells within 400 m of the proposal. Citywide mean ${sc.city.before.toFixed(1)} → ${sc.city.after.toFixed(1)}; ${sc.city.up} of ${sc.city.cells} cells gain a point or more. Turn on the <b>Bike score heat map</b> layer to see it.</div>
     <div class="label" style="margin-top:10px">How the score was calculated</div>${explain.map(t=>`<div class="msg" style="background:#F8FAFC;color:var(--ink2)">${t}</div>`).join('')}<div class="small"><a href="#" data-act="method">Full methodology and references →</a></div>`:'<div class="msg warn">No score grid in the data (run scripts/score.py).</div>'}
+    ${S.lts&&typeof ltsDetailHTML==='function'?ltsDetailHTML(S.lts):''}
     <div class="label" style="margin-top:10px">Connectivity</div>
     <div class="kv"><div><b>Joins the All Ages and Abilities network</b><span>${S.conn.aaa} end${S.conn.aaa===1?'':'s'}</span></div><div><b>Joins other facilities</b><span>${S.conn.exist}</span></div><div><b>Inside the proposal</b><span>${S.conn.internal} ends</span></div><div><b>Loose ends</b><span>${S.conn.loose}</span></div></div>
     ${S.conn.links.length?`<div class="small muted">${S.conn.links.slice(0,6).map(l=>(l.t==='aaa'?'AAA: ':'')+esc(l.n)).join(' · ')}${S.conn.links.length>6?' · …':''}</div>`:''}
@@ -95,25 +97,27 @@ function statsHTML(p, S){ S=S||propStats(p); const km=(S.len/1000).toFixed(2); c
     <div class="label" style="margin-top:10px">Street photos (check the existing street)</div><div class="stats-photos small muted">…</div>`; }
 // ── v3: the score where it is seen — a box on the proposal card, a number on each proposal row, a live chip on the design page ──
 // S: propStats result; mode 'box' (card), 'row' (project panel), 'chip' (design page)
-function scoreBoxHTML(S, mode){ const sc=S.score; const pc=v=>Math.round(v); const sgn=v=>(v>=0?'+':'')+(Math.abs(v)<10?v.toFixed(1):Math.round(v));   /* one decimal on the change, so a block's contribution is visible */ if(!sc||!sc.after) return mode==='row'?'':'<div class="small muted">No score grid in the data.</div>';
+function scoreBoxHTML(S, mode){ const sc=S.score; const pc=v=>Math.round(v); const sgn=v=>(v>=0?'+':'')+(Math.abs(v)<10?v.toFixed(1):Math.round(v));   /* one decimal on the change, so a block's contribution is visible */ const L=S.lts&&typeof ltsBoxHTML==='function'?ltsBoxHTML(S.lts, mode):'';   // v4: traffic stress beside the score, in every form
+  if(!sc||!sc.after) return mode==='row'?L:('<div class="small muted">No score grid in the data.</div>'+L);
   const a=sc.after.total, b=sc.before.total, d=a-b; const band=bandOf(a); const col=scoreColor(a);
-  if(mode==='row') return `<span class="srow" title="Bike score around this proposal: ${pc(b)} before → ${pc(a)} after" style="color:${col}">${pc(a)}<small>${sgn(d)}</small></span>`;
-  if(mode==='chip') return `<b style="color:${col}">${pc(a)}</b> <span class="muted">bike score · ${pc(b)} → ${pc(a)} (${sgn(d)}) · ${band[1]}</span>`;
+  if(mode==='row') return `<span class="srow" title="Bike score around this proposal: ${pc(b)} before → ${pc(a)} after" style="color:${col}">${pc(a)}<small>${sgn(d)}</small></span>`+L;
+  if(mode==='chip') return `<b style="color:${col}">${pc(a)}</b> <span class="muted">bike score · ${pc(b)} → ${pc(a)} (${sgn(d)}) · ${band[1]}</span> `+L;
   const all=sc.afterAll&&sc.others?`<div class="small muted">with the other visible proposals: <b>${pc(sc.afterAll.total)}</b> (${sgn(sc.afterAll.total-b)}) — what the heat map shows</div>`:'';
-  return `<div class="scorebox"><div class="num" style="color:${col}">${pc(a)}</div><div class="grow"><div><b>Bike score</b> around the proposal · this proposal alone</div><div class="small muted">${pc(b)} before → ${pc(a)} after <b style="color:${d>=0?'var(--green)':'var(--red)'}">${sgn(d)}</b> · ${band[1]}</div>${all}</div><button class="ghost small" data-act="sdet" title="Statistics: how the score is built, connections, grades, photos">Details ▾</button></div>`; }
+  return `<div class="scorebox"><div class="num" style="color:${col}">${pc(a)}</div><div class="grow"><div><b>Bike score</b> around the proposal · this proposal alone</div><div class="small muted">${pc(b)} before → ${pc(a)} after <b style="color:${d>=0?'var(--green)':'var(--red)'}">${sgn(d)}</b> · ${band[1]}</div>${all}</div><button class="ghost small" data-act="sdet" title="Statistics: how the score is built, traffic stress block by block, connections, grades, photos">Details ▾</button></div>`+L; }
 // the design page: the proposal's score with the option being edited in place of this block's saved design, recomputed (debounced)
 // whenever the design changes; click → the Bike score tab
-function updateLiveScore(){ const el=$('stp3'); if(!D.ctx) return; /* the Review & score tab carries the live number; the recommendations a one-line gauge */ clearTimeout(updateLiveScore.t); updateLiveScore.t=setTimeout(()=>{ const s=D.ctx.seg; const o=curOpt(); if(!o) return; let p=propOf(s.i); const extra={i:s.i, sep:o.sep};
+function updateLiveScore(){ const el=$('stp3'); if(!D.ctx) return; /* the Review & score tab carries the live number; the recommendations a one-line gauge */ clearTimeout(updateLiveScore.t); updateLiveScore.t=setTimeout(()=>{ const s=D.ctx.seg; const o=curOpt(); if(!o) return; let p=propOf(s.i); const extra={i:s.i, sep:o.sep, opt:o};   // v4: the option itself, for the traffic stress of the design being edited
     if(!p) p={id:'tmp', name:'', blocks:{[s.i]:{i:s.i, opt:o, x:ctxOverrides(D.ctx), auto:false}}};
-    const key=(p.id)+'|'+Object.keys(p.blocks).join(',')+'|'+o.sep; if(updateLiveScore.key===key) return; updateLiveScore.key=key;
+    const key=(p.id)+'|'+Object.keys(p.blocks).join(',')+'|'+o.sep+'|'+JSON.stringify(o.els)+'|'+(D.ctx.spdUser||''); if(updateLiveScore.key===key) return; updateLiveScore.key=key;
     const S=propStats(p, extra); const sc=S.score; if(!sc||!sc.after){ if(el) el.textContent='Review & score'; return; } const a=sc.after.total, d=a-sc.before.total;
     const ds=(d>=0?'+':'')+(Math.abs(d)<10?d.toFixed(1):Math.round(d)); if(el) el.innerHTML=`Review &amp; score · <b style="color:${scoreColor(a)}">${Math.round(a)}</b> <small style="color:${d>=0?'var(--green)':'var(--red)'}">${ds}</small>`;
-    const g=$('rec-score'); if(g) g.innerHTML=`Bike score gauge — the proposal with this design: <b style="color:${scoreColor(a)}">${Math.round(a)}</b> (${ds} on the existing network, ${bandOf(a)[1]}). Details on the Review &amp; score tab once every block is designed.`; if(el) el.title='Bike score around '+(p.id==='tmp'?'this block':p.name)+' with the design being edited: '+Math.round(sc.before.total)+' before → '+Math.round(a)+' after. Click for the details.'; }, 200); }
-function bindStats(box,p){ const m=box.querySelector('[data-act=method]'); if(m) m.onclick=e=>{ e.preventDefault(); $('method').classList.add('show'); }; const ph=box.querySelector('.stats-photos'); if(ph&&typeof renderPhotoStrip==='function') renderPhotoStrip(p, ph); }
+    const g=$('rec-score'); if(g) g.innerHTML=`Bike score gauge — the proposal with this design: <b style="color:${scoreColor(a)}">${Math.round(a)}</b> (${ds} on the existing network, ${bandOf(a)[1]}). Details on the Review &amp; score tab once every block is designed.`; if(el) el.title='Bike score around '+(p.id==='tmp'?'this block':p.name)+' with the design being edited: '+Math.round(sc.before.total)+' before → '+Math.round(a)+' after. Click for the details.';
+    if(typeof renderLtsPanel==='function') renderLtsPanel(S); }, 200); }
+function bindStats(box,p){ box.querySelectorAll('[data-act=method]').forEach(m=>{ m.onclick=e=>{ e.preventDefault(); $('method').classList.add('show'); }; }); const ph=box.querySelector('.stats-photos'); if(ph&&typeof renderPhotoStrip==='function') renderPhotoStrip(p, ph); }
 function showStats(id){ const p=PROJ.proposals.find(x=>x.id===id)||activeProp(); if(!p) return; PROJ.active=p.id; showPropCard(p, null, {details:true}); }   // v3: the details open inside the proposal card
 // the Score tab of the design screen: the proposal this block belongs to, or the block on its own as a one-block proposal
 function renderScorePane(){ const pane=$('bscore'); if(!pane||!D.ctx||pane.style.display==='none') return; const s=D.ctx.seg; let p=propOf(s.i); let note='';
   if(!p){ const d=blockDefault(s); p={id:'tmp', name:titleCase(s.n)+' (this block only)', blocks:d?{[s.i]:{i:s.i, opt:cloneJ(curOpt()||d.opt), x:ctxOverrides(D.ctx), auto:false}}:{}}; note='<div class="msg info">This block is not in a proposal yet: the score is for the block on its own. Save it to a proposal to score the whole route.</div>'; }
-  const o=curOpt(); const S=propStats(p, o?{i:s.i, sep:o.sep}:null);   // the option being edited counts in place of the saved one
+  const o=curOpt(); const S=propStats(p, o?{i:s.i, sep:o.sep, opt:o}:null);   // the option being edited counts in place of the saved one
   pane.innerHTML=`<div class="scorein"><h4 style="font-size:12px;font-weight:600;margin-bottom:4px">${esc(p.name)} · bike score</h4>${note}${scoreBoxHTML(S,'box').replace(/<button[^>]*sdet[^>]*>.*?<\/button>/,'')}${statsHTML(p,S)}</div>`; bindStats(pane,p); }
 $('method').addEventListener('click',e=>{ if(e.target.id==='method'||e.target.dataset.act==='close') $('method').classList.remove('show'); });

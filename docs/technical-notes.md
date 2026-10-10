@@ -1,5 +1,7 @@
 ﻿# Vancouver Bikeway Designer — version 2 (with the version 3 network features)
 
+**Version 4 features (2026-10-09)** — a Level of Traffic Stress (LTS) rating of every block, before and after a proposal, with a map layer, a legend and a network-progress line; traffic signals and ICBC cyclist crashes as layers and on the cards; a posted-speed field on the design screen. See *Version 4: traffic stress, signals, crashes* below. The state before these changes is kept in `0 Archive/5 Tool v2 backup 2026-10-09 (before LTS, signals and crash layers)`.
+
 **Version 3 features (2026-09-28)** — proposals over many blocks, a project that saves, a bike score with a heat map, map layers for bike infrastructure and cycling volumes, a north arrow, a street photo per block, and editable existing widths. See *Version 3: proposals, project, bike score, layers, photos* below. The state before these changes is kept in `0 Archive/5 Tool v2 backup 2026-09-28`.
 
 Version 2 adds **design cases** (a block that already has a bikeway is no longer treated as an empty street), makes **every bikeway feature clickable** for its details, and replaces the width sliders with **direct editing in the Plan and Section views** (drag handles, element cards for protection type and level). See *What version 2 changes* and *Editing the section in the view* below. Version 1 is kept untouched in `4 Tool`.
@@ -19,6 +21,7 @@ src/
   02_core.js               data decoders, EDM rules, layout solver, options, compliance, recommendations, context helpers
   03_map.js                city map: land/water, streets, bikeways, buildings, parks, boundary, search, selection
   04_design.js             design screen state: options, editor, panels, view plumbing, before/animate/context toggles
+  04cb_lts.js              v4: Level of Traffic Stress (2012 criteria), network figures, ICBC crashes, traffic-signal nodes
   05_plan_section.js       2D renderers (plan, section), zoom/pan with scale-invariant dimensions, plan animation
   06_three.js              Three.js scene: terrain, city context, block, intersections, movers, orbit camera
   07_boot.js               boot + closing tags
@@ -28,6 +31,7 @@ scripts/
   bld.py                   (superseded) 2009+2015 footprints → packed building layer
   bld2.py                  2015 outlines + 2009 LiDAR heights → packed building layer (≈40 s; needs shapely + pyproj only)
   terrain.py               1 m contours → 20 m elevation grid                       (≈10 s)
+  icbc.py                  v4: ICBC crash CSV → counts per street node and per block (pure Python, ≈10 s)
   assemble.py              src/ + data/data.json (+ data/overrides.json) → index.html
   audit.py                 data/audit_cases.json → audit.html, the review page (Google Maps links, verdicts → overrides.json)
 audit.html                 the review page (generated; open in any browser)
@@ -38,7 +42,7 @@ data/
   raw/                     put the CoV Open Data exports here (not included, ≈450 MB)
 ```
 
-Rebuild order when raw data changes: `build.py → enrich.py → bld.py → terrain.py → osm.py → merge.py → assemble.py` (`osm.py` needs `pip install pyproj` and network access to an Overpass mirror; its response is cached in `data/raw/`). Each script reads and rewrites `data.json`, so they must run in that order. Scripts expect raw files in `/mnt/user-data/uploads/` — change `U=` at the top of each to `data/raw/`.
+Rebuild order when raw data changes: `build.py → enrich.py → bld.py → terrain.py → osm.py → merge.py → icbc.py → assemble.py` (`osm.py` needs `pip install pyproj` and network access to an Overpass mirror; its response is cached in `data/raw/`). Each script reads and rewrites `data.json`, so they must run in that order. Scripts expect raw files in `/mnt/user-data/uploads/` — change `U=` at the top of each to `data/raw/`.
 
 ---
 
@@ -57,7 +61,8 @@ Rebuild order when raw data changes: `build.py → enrich.py → bld.py → terr
 | lanes | laneway openings per side with position along block |
 | shoreline-2002 + city-boundary | polygonised into land (134 km²); boundary = zoom-out limit |
 | parks | points (name, hectares), kept as the fallback; **parks-polygon-representation** (v3, `scripts/parkpoly.py`, downloaded from Open Data into `data/raw/parks-polygon.geojson`): 254 parks → 292 rings simplified to 1.5 m, shaded to their real boundaries on the map (`parkpoly` in data.json) |
-| traffic-signals | signal type at block ends → crosswalk logic, signal heads |
+| traffic-signals | signal type at block ends → crosswalk logic, signal heads; v4: a map layer by type (532 signals, 414 pedestrian-actuated, 49 RRFB / special crosswalks at the tool's nodes) and "signalised crossing" in the LTS rating |
+| **ICBC Reported Crashes 2021–2025** (v4, `scripts/icbc.py`; `../2 Vancouver Open Data/icbc-reported-crashes-vancouver-2021-2025.csv`, exported from the Hyper extract inside ICBC's Tableau Public workbook, data as of 31 Mar 2026, ICBC Open Data Licence) | 232,042 Vancouver crash rows, 212,794 with a location; cyclist-involved 4,455 (4,124 located). Intersection crashes → nearest street node within 40 m, mid-block → nearest block within 30 m (97 % matched): 1,919 nodes and 689 blocks with a cyclist or pedestrian crash, as `crash` in data.json |
 | truck-routes | bus/truck flag → 3.2 m curb lane minimum |
 | one-way-streets | one-way blocks → single-direction lane solver. The dataset carries no direction of travel; direction comes from OSM (below) where tagged, otherwise +z (north / east) is assumed and every label says so |
 | **OpenStreetMap** (`scripts/osm.py`, Overpass, ODbL) | `lanes`, `oneway` direction and `maxspeed` per block, matched by normalised street name within 30 m (10 m unnamed). Not widths: OSM has almost none for Vancouver |
@@ -344,6 +349,26 @@ The design screen has a **street panel** on the left (`#side`): on top, a live G
 
 Below the lane / parking / bus fields, **Existing widths** lists the before-state elements with their standard widths (EDM: travel 3.0–3.5 m, parking 2.5 m, painted lane 1.5 m, protected 1.8 m / two-way 3.0 m, buffer 0.6 m). Any width can be replaced with a measured one (from the photo or the site); the curb-to-curb then follows the sum, the tag reads *measured*, and the proposed options are regenerated from the new width — the after state always follows the before state. Changing lanes, parking or the curb-to-curb by hand returns to standard widths. The edited widths are saved with the block in its proposal.
 
+### Version 4: traffic stress, signals, crashes (2026-10-09; `04cb_lts.js`, `scripts/icbc.py`)
+
+**Why.** The bike score counts how much bikeway is near a place; it does not say whether a street is comfortable to ride, and it does not reward upgrading an existing painted lane on an arterial. The Level of Traffic Stress rating does both, so it is reported **beside** the score, block by block — the score itself is untouched, so it stays the published Bike Score method.
+
+**Method** (`ltsSegOne`, `ltsCrossOne`). Mekuria, Furth & Nixon (2012), MTI report 11-19 — the original criteria, which need no traffic volumes: Table 2 (bike lanes alongside parking: through lanes per direction, reach, speed), Table 3 (not alongside parking: lanes, width ≥ 6 ft, speed), Table 4 (mixed traffic: speed × lanes, the residential / no-centreline lower value), Table 7 (unsignalised crossings without a refuge: speed × lanes of the street crossed), §III (physically separated bikeways — curbs, posts, planters, barriers, raised lanes, a parking lane between the bike lane and traffic, off-street paths — LTS 1), and the weakest-link rule of §IV. Furth's v2.2 note 4 (a bike lane is never worse than mixed traffic on its street) is applied too. Speed bins converted from mph: ≤ 40 km/h, 41–52, 53–60, > 60. A block = the worst of its segment rating and the crossings at its two ends (`ltsCross`: the same-level crossing streets at the node, via `sameLevelCross`; a true signal — fixed-time, actuated, pedestrian-actuated, bus — removes the crossing; an RRFB or special crosswalk does not).
+
+**No assumed inputs** (`ltsSeg`, `ltsExisting`). Each input is real or unknown; an unknown is enumerated and the block gets a range `lo–hi`: speed from OSM `maxspeed` (5,208 blocks), the bikeways layer `speed_limit`, or the user's confirmed value, else {30, 50}; lanes from OSM `lanes` (4,432 blocks; 95 % of arterials) or the user's verified value, else {2, 4} two-way / {1, 2} one-way, with the 2012 residential surrogate on Residential-class streets (noted on the card); an existing painted lane's width {< 1.8 m, ≥ 1.8 m}; parking beside the lane from the subtype (PBP / PBPT), the meters, or the verified parking, else both. Enumeration is at most 2 × 2 × 2 × 2 × 2 cases per block, and the crossings are enumerated separately and combined with `max` (exact, since `max` is monotone). Distribution today: 2,549 blocks at a firm LTS 1, 4,303 at 1–2 (residential streets with no speed tag), 1,192 at 2, 892 at 3, 1,202 at 4, 489 other ranges; computing the whole city takes about 6 ms once the context caches are warm.
+
+**Before and after** (`ltsPair`, `ltsProposed`). *Before* is the block as recorded, plus the existing-state edits of a **verified** block (lanes, parking, speed — verifying closes the range). *After* reads the chosen option's elements: any buffer with a physical kind (posts, pre-cast, planter, extruded, barrier, raised) or a parking lane between the bike lane and the travel lanes makes it "separated" (LTS 1 between intersections); a paint-only buffer gives a painted lane with its drawn width and whether parking sits beside it; the shared option is mixed traffic. A block is *improved* when the worse end of its range drops; *low-stress* when its whole range is 1–2.
+
+**Where it shows.** In the interface the rating is called **cycling comfort** (the method's name, Level of Traffic Stress, is kept in the level codes LTS 1–4 and in the methodology panel). The legend's *Streets coloured by* radio switches the map between the **bikeways view** (streets grey, bikeways in the greens, proposals magenta) and the **stress view** (`drawLtsLayer`: every street in its level's colour — ColorBrewer RdYlBu stops, blue LTS 1 → red LTS 4, cool to hot, colour-blind safe, no green so green stays the bikeways' colour — at the worse end of its range, dashed when it is a range; a block with a bikeway today keeps a dark edge (casing); off-street paths LTS 1 with the edge; a proposal's blocks at the stress of their design in a magenta halo; a checkbox per level leaves unticked levels on the grey base, so unticking 3 and 4 shows the low-stress network alone, the gap-finding view of the Boston and Ottawa maps). One colouring at a time, never both. The legend collapses to its header. The project panel and the proposal / block card share one column on the right (`#rightcol`), the zoom buttons sit top-left, so nothing covers the legend; the hover tooltip; the block card (today → in its proposal, with the inputs); the verify bar of the design screen (today, with the crashes); the compliance column (before → after this option, live, with the reason a block stays above 2 — usually the crossing); the proposal card and row (`ltsBoxHTML`: blocks at LTS 1–2 after / before, improved, existing bikeways upgraded, worst block before → after, crashes); the statistics (`ltsDetailHTML`: block by block with the inputs on hover) and so the exported report; and the project panel's **network line** (`ltsNetHTML`: kilometres of low-stress street and the count of existing bikeway blocks above LTS 2, before → with every visible proposal, plus blocks improved) so the network's progress is in view as proposals are added — a design that makes a block worse (a shared option on an arterial that had a protected lane) is reported as such.
+
+**Posted speed** (`renderSpeedField`, `x-spd`). The existing-street panel gains the speed limit: "as recorded" names the source (OSM, bikeways layer) or says the class default is unconfirmed; a confirmed value is kept in the block's overrides (`spd`), used by the separation rules and the rating.
+
+**Traffic signals** (`SIG_NODES`, `drawSigLayer`). One glyph per street node from the block-end `sig` values already in the data: circle = signal, square = pedestrian-actuated, triangle = RRFB / special crosswalk.
+
+**Crashes** (`scripts/icbc.py`, `CRASH`, `drawCrashLayer`, `crashOfBlock`). Circles at intersections with area ∝ cyclist crashes and a darker core for the injured share, squares mid-block; counts on the block card, the verify bar and the proposal box. Crashes are an outcome, not an input: they are not in any score. ICBC's caveats (self-reported claims, approximate locations, mid-block crashes placed at the block's middle, 92 % located) are in the legend and the methodology panel.
+
+**Not done, on purpose.** No per-proposal traffic-reduction figure: the tool has no vehicle volumes, so there is no before to reduce and any number would be an assumed mode shift. No LTS term inside the bike score.
+
 ## Reviewing against Google Maps (v2: `exportAuditCases` in `02_core.js`, `scripts/audit.py`, `data/overrides.json`)
 
 **Is Google Maps a usable check?** Yes, for looking; no, as a data source. Its satellite imagery, Street View and 3D tiles show what is on the ground today — whether a street really passes under a ramp, whether a cul-de-sac bulb exists — and the tool's data (City centrelines, OSM) is what can be wrong. But Google's terms do not allow copying, tracing or deriving data from its maps, and there is no open API for street geometry, so nothing from Google goes into `data.json`. The workflow is: the tool lists every end it reads as *special*, a person looks at each in Google Maps, and records a verdict; the verdict — the reviewer's own observation — is what the tool applies.
@@ -425,7 +450,8 @@ The 3D view is drawn as an illustration, not a lit model: the line carries the f
 - Heights for the 22,276 post-2009 buildings: LiDAR 2022 zonal stats, or Overture Maps.
 - Curb lines / corner radii / crosswalk markings: not published; if a *road surfaces* polygon layer exists on the portal it would replace the 5 m assumption.
 - Cross-street lane layout at intersections is generic.
-- AADT remains manual.
+- AADT remains manual. The LTS rating uses the 2012 criteria for that reason; Furth's 2022 tables need daily volumes for mixed traffic.
+- LTS inputs that no dataset has — bike-lane width of existing painted lanes, unmetered parking, raised medians, pocket right-turn lanes — leave a range on the block until it is verified on the design screen.
 - Section is always cut at mid-block; a movable cut line would be useful.
 
 ## Testing

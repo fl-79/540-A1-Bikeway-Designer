@@ -40,7 +40,7 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(20
 .tag.ok{background:#DCFCE7;color:#166534}.tag.warn{background:#FEF3C7;color:#92400E}.tag.err{background:#FEE2E2;color:#991B1B}.tag.info{background:#DBEAFE;color:#1E40AF}
 #app{height:100vh;display:flex;flex-direction:column}
 header{height:54px;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--panel);border-bottom:1px solid var(--line);z-index:5}
-.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center}.logo svg{display:block}
 header h1{font-size:14px;font-weight:600}
 header .sub{font-size:11.5px;color:var(--ink2)}
 #build{position:fixed;right:8px;bottom:3px;z-index:60;font:10px/1.2 'JetBrains Mono',monospace;color:var(--ink2);opacity:.5}   /* v3: the build stamp, out of the way in the corner */
@@ -56,19 +56,19 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 #screen-map{flex:1;position:relative;display:none}
 #screen-map.active{display:block}
 #map{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;background:#ECEEF1}   /* explicit 100%: an absolutely positioned canvas otherwise keeps its intrinsic size */
-.legend{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.72);backdrop-filter:blur(6px);border:1px solid rgba(228,231,236,.8);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--ink2);opacity:.85;transition:.15s}
+.legend{position:absolute;left:12px;bottom:12px;max-width:360px;max-height:calc(100% - 24px);overflow:auto;background:rgba(255,255,255,.72);backdrop-filter:blur(6px);border:1px solid rgba(228,231,236,.8);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--ink2);opacity:.85;transition:.15s}   /* v4: scrolls when several layers are on */
 .legend:hover{opacity:1;background:rgba(255,255,255,.95)}
 .legend .label{margin-bottom:4px;font-size:10px}
 .legend .item{display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px}
 .legend .sw{width:22px;height:0;border-top:3px solid #16A34A}
-.card{position:absolute;right:16px;top:16px;width:340px;background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px;display:none}
+.card{position:relative;width:100%;flex-shrink:0;background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px;display:none}
 .card.show{display:block}
 .card h3{font-size:15px;font-weight:600;margin-bottom:2px}
 .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin:10px 0}
 .kv div b{display:block;font-size:10.5px;color:var(--ink3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
 .kv div span{font-family:var(--mono);font-size:12px}
 .hint{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(15,23,42,.85);color:#fff;padding:6px 12px;border-radius:999px;font-size:12px;pointer-events:none}
-.mapzoom{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:4px}
+.mapzoom{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:4px}
 .mapzoom button{width:32px;height:32px;padding:0;font-size:16px;background:rgba(255,255,255,.95)}
 .maphelp{position:absolute;right:16px;bottom:16px;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--ink2)}
 .maptip{position:absolute;display:none;max-width:280px;background:rgba(15,23,42,.92);color:#fff;padding:7px 10px;border-radius:8px;font-size:11.5px;line-height:1.35;pointer-events:none;z-index:6;box-shadow:var(--shadow)}
@@ -162,7 +162,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink3)}
 ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#D0D5DD;border-radius:8px}
 /* v3: project panel, proposals, layers, statistics, photos, modals */
-.panel{position:absolute;left:12px;top:12px;width:312px;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:10px 12px;font-size:12px;z-index:4}
+.panel{position:relative;width:100%;flex-shrink:0;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:10px 12px;font-size:12px;z-index:4}
 .panel h4{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px}
 .panel h4 input{flex:1;min-width:0;border:1px solid transparent;padding:3px 6px;font-weight:500;background:transparent}
 .panel h4 input:hover,.panel h4 input:focus{border-color:var(--line2);background:#fff}
@@ -182,7 +182,17 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 .legend label.lay{display:flex;align-items:center;gap:6px;font-size:11px;margin:3px 0;cursor:pointer}
 .legend label.lay input{margin:0}
 .legend canvas{width:18px;height:18px}
-.card.stats{width:390px;max-height:calc(100% - 32px);overflow:auto}
+.card.stats{max-height:46vh;overflow:auto}
+/* v4: everything about the project lives in one column on the right — the project panel, then the proposal / block card */
+#rightcol{position:absolute;right:12px;top:12px;width:344px;max-height:calc(100% - 24px);display:flex;flex-direction:column;gap:8px;overflow:auto;z-index:4}
+.legend .leghead{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;color:var(--ink2);margin:-2px 0 2px}.legend .leghead button{padding:0 6px;line-height:18px}
+.legend.min>*:not(.leghead){display:none}
+.legend .ltsbar{display:flex;gap:2px;width:170px;margin:2px 0 4px}.legend .ltsbar span{flex:1;height:10px}.legend .ltsbar span:first-child{border-radius:3px 0 0 3px}.legend .ltsbar span:last-child{border-radius:0 3px 3px 0}
+.legend .legbox{margin-top:10px;padding:6px 8px 4px;border:1px solid var(--line2);border-radius:7px;background:rgba(241,245,249,.9)}
+.legend .legbox .label{margin-bottom:3px}.legend .lay.sub{padding-left:18px}.legend .lay.sub .lv{display:inline-flex;margin-left:6px;align-items:center;gap:2px;cursor:pointer}.legend .lay.sub .lv span{padding:0 3px;font-weight:600}
+.legend .item.off{opacity:.45}
+.legend .legsec+.legnote,.legend .legsec+.ltsbar{margin-top:2px}
+.legend .legsec{display:flex;align-items:center;justify-content:space-between;gap:6px}.legend .legi{width:16px;height:16px;padding:0;border-radius:50%;border:1px solid var(--line2);font:600 10px/14px var(--mono);color:var(--ink3)}.legend .legi:hover,.legend .legi.on{color:#fff;background:var(--ink2);border-color:var(--ink2)}.legend .legnote{margin:0 0 6px;line-height:1.35}
 .stats .big{font-size:30px;font-weight:700;font-family:var(--mono);line-height:1}
 .stats .sc{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:8px 0}
 .stats .sc div{background:#F8FAFC;border-radius:8px;padding:6px 8px}
@@ -263,20 +273,32 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 .stepbar .stp.active{color:var(--ink);font-weight:600}.stepbar .stp.active b{background:var(--accent);color:#fff}.stepbar .stp.done b{background:var(--green);color:#fff}
 .stepbar .pnav{display:flex;align-items:center;gap:4px;color:var(--ink2)}.stepbar .pnav button{padding:0 7px;line-height:20px}
 .bverify,.breview{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--ink2)}.bverify>div:first-child,.breview>div:first-child{max-width:60%}
-.blockbar{display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid var(--line);background:#fff;font-size:12px;flex-shrink:0;overflow-x:auto}
-.blockbar .bb-name{font-weight:600;margin-right:6px;white-space:nowrap}
-.blockbar .bb{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink2);white-space:nowrap;cursor:pointer;font-size:12px}
-.blockbar .bb .n{font-weight:600;color:var(--ink3)}.blockbar .bb i{width:11px;height:11px;border-radius:50%;border:1.5px solid #94A3B8;background:#fff;flex:none}
-.blockbar .bb.verified i{background:linear-gradient(90deg,var(--accent) 50%,#fff 50%);border-color:var(--accent)}.blockbar .bb.done i{background:var(--green);border-color:var(--green)}
-.blockbar .bb.cur{border-color:var(--ink);color:var(--ink);box-shadow:0 0 0 2px #E2E8F0}.blockbar .bb:disabled{opacity:.45;cursor:not-allowed}
-.blockbar .bb.review.ready{border-color:var(--green);color:var(--ink)}.blockbar .bb.review.ready i{background:var(--green);border-color:var(--green)}
+/* v4: the block tabs as folder tabs (trapezoids, slightly overlapping) on a progress bar; colour = state:
+   blue = existing street to verify · amber = verified, design pending · green = designed · the current tab stands taller */
+.blockbar{display:flex;flex-direction:column;padding:8px 14px 0;border-bottom:1px solid var(--line);background:#F8FAFC;font-size:12px;flex-shrink:0}
+.blockbar .bbrow{display:flex;align-items:flex-end;gap:0;overflow-x:auto;overflow-y:hidden;padding:0 8px 0 0}
+.blockbar .bbgap{width:12px;flex:none}
+.blockbar .bb{--tb:#DBEAFE;--tk:#1E40AF;--td:#3B82F6;display:inline-flex;align-items:center;gap:7px;padding:5px 16px 6px 13px;margin-right:-6px;border:none;border-radius:0;background:transparent;color:var(--tk);white-space:nowrap;cursor:pointer;font-size:12px;flex:none;position:relative;z-index:1;opacity:.92}
+.blockbar .bb::before{content:'';position:absolute;inset:0;background:var(--tb);clip-path:polygon(0 100%,8px 0,calc(100% - 8px) 0,100% 100%);z-index:-1}
+.blockbar .bb .t{font-weight:500}.blockbar .bb small{font-size:10.5px;opacity:.85}
+.blockbar .bb .n{width:18px;height:18px;border-radius:50%;background:var(--td);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:none}
+.blockbar .bb.verified{--tb:#FEF3C7;--tk:#92400E;--td:#F59E0B}
+.blockbar .bb.done{--tb:#DCFCE7;--tk:#166534;--td:#16A34A}
+.blockbar .bb.cur{opacity:1;z-index:2;padding-top:8px;font-weight:600}.blockbar .bb.cur::before{box-shadow:inset 0 3px 0 var(--td)}
+.blockbar .bb.review{--tb:#E2E8F0;--tk:#475569;--td:#94A3B8}.blockbar .bb.review.ready{--tb:#DCFCE7;--tk:#166534;--td:#16A34A}
+.blockbar .bb:disabled{opacity:.55;cursor:not-allowed}
+.blockbar .bbprog{height:4px;background:#CBD5E1;margin:0 -14px;position:relative;z-index:3}.blockbar .bbprog i{display:block;height:100%;background:var(--green);transition:width .25s}
+.blockbar .bb-name{font-weight:600;margin:0 8px 6px 0;white-space:nowrap;align-self:center}
+.blockbar .bb{display:inline-flex;align-items:center;gap:7px;padding:4px 11px 4px 5px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink2);white-space:nowrap;cursor:pointer;font-size:12px;flex:none}
+.blockbar .bb:disabled{opacity:.45;cursor:not-allowed}
+.blockbar .bb.review.ready{border-color:var(--green);color:var(--ink)}
 .blockbar .bb-sum{color:var(--ink3);white-space:nowrap;margin:0 6px}.blockbar .bb span b,.blockbar .bb span small{display:inline;width:auto;height:auto;background:none;border-radius:0}.dirsel select{margin-left:4px}
 </style>
 </head>
 <body>
 <div id="app">
 <header>
-  <div class="logo">B</div>
+  <div class="logo" title="Vancouver Bikeway Designer"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 8.5h4.5l5 8M9 8.5l3.5 8M13.5 8.5h-2M15 5.5h2.2"/></svg></div>
   <div><h1>Vancouver Bikeway Designer</h1></div>
   <div class="grow"></div>
   <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="text" placeholder="Search a block, e.g. 1000 Hornby St" autocomplete="off"><div class="ac" id="ac"></div></div>
@@ -287,10 +309,10 @@ header .sub{font-size:11.5px;color:var(--ink2)}
 <div id="screen-map" class="active">
   <canvas id="map"></canvas>
   <div class="hint" id="maphint">Click blocks to build a proposal (+ adds, − removes) · click an existing bikeway for details</div>
-  <div class="panel" id="proj"></div>
   <div class="toast" id="toast"></div>
   <input type="file" id="proj-file" accept=".json,application/json" style="display:none">
   <div class="legend">
+    <div id="leg-dyn"></div>
     <div id="leg-exist">
     <div class="label">Existing bikeways</div>
     <div class="item"><span class="sw" style="border-top:4px solid #15803D"></span>Protected bike lane · All Ages and Abilities (AAA)</div>
@@ -301,13 +323,12 @@ header .sub{font-size:11.5px;color:var(--ink2)}
     <div class="item" style="margin-top:8px"><span class="sw" style="border-top:2px solid #C4C9D1"></span>Street without a bikeway</div>
     <div class="item"><span class="sw" style="border-top:4px solid #F59E0B"></span>Selected block / route start</div>
     </div>
-    <div id="leg-dyn"></div>
     <div id="leg-layers"></div>
   </div>
   <div class="maphelp">Scroll or double-click to zoom · Drag to pan</div>
-  <div class="card stats" id="stats"></div>
   <div class="maptip" id="maptip"></div>
   <div class="mapzoom"><button id="mz-in">+</button><button id="mz-out">−</button><button id="mz-fit" title="Fit city">⌂</button></div>
+  <div id="rightcol"><div class="panel" id="proj"></div><div class="card stats" id="stats"></div>
   <div class="card" id="card">
     <div class="row"><h3 id="c-title">—</h3><div class="grow"></div><button class="ghost small" id="c-close">✕</button></div>
     <div class="small muted" id="c-sub"></div>
@@ -318,7 +339,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
     <button id="c-design1" style="width:100%;margin-top:10px;display:none">Design only this block →</button>
     <button class="primary" id="c-design" style="width:100%;margin-top:6px">Design a bike lane here →</button>
     <button id="c-prop" style="width:100%;margin-top:6px">+ Add to proposal</button>
-  </div>
+  </div></div>
 </div>
 
 <div id="screen-design">
@@ -350,6 +371,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
             <div><label>Side (one-side lanes)</label><select id="x-side"><option value="auto">as mapped (OSM)</option><option value="L">W / N side</option><option value="R">E / S side</option></select></div>
             <div><label>Bus / truck route</label><select id="x-bus"><option value="0">No</option><option value="1">Yes</option></select></div>
             <div><label>Traffic volume (AADT, vehicles/day)</label><input type="number" id="x-aadt" placeholder="unknown"></div>
+            <div style="grid-column:1/-1"><label>Posted speed limit <span class="muted" id="x-spdrec"></span></label><select id="x-spd" title="The speed limit as posted on the street (check the Street View). Used by the separation rules and the traffic-stress rating; a recorded value comes from OpenStreetMap or the City's bikeways layer, otherwise the class default is shown and the stress rating treats it as unknown"><option value="">as recorded</option><option value="30">30 km/h</option><option value="40">40 km/h</option><option value="50">50 km/h</option><option value="60">60 km/h</option></select></div>
           </div>
           <div class="small muted" style="margin-top:6px"><b>Bus / truck route:</b> buses and trucks need wider lanes — curb lanes 3.2 m minimum instead of 3.0 m, a single lane 3.5 m (Engineering Design Manual Table 8-10). Inferred from the City's bus and truck route layers; switch it off if no route runs on this block.</div>
           <div class="small muted" id="sw-note" style="margin-top:6px">Sidewalk + boulevard fixed at 3.6 m each side — property lines cannot change.</div>
@@ -368,7 +390,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
       <input class="inl" id="inl" type="text" inputmode="decimal" spellcheck="false">
     </div>
     <div class="bottom" id="bottom">
-      <div class="bverify" id="bverify"><div><b>Verify the existing street.</b> The drawings above and the Street View on the left show the street as recorded (lanes, parking, bikeway, widths). If the street differs, correct it in the panel on the left — the proposal is built from these values.</div><div class="grow"></div><button class="primary" id="bv-ok">Existing street is correct → Design</button></div>
+      <div class="bverify" id="bverify"><div><b>Verify the existing street.</b> The drawings above and the Street View on the left show the street as recorded (lanes, parking, bikeway, widths, speed limit). If the street differs, correct it in the panel on the left — the proposal is built from these values.<div class="small" id="bv-lts" style="margin-top:4px"></div></div><div class="grow"></div><button class="primary" id="bv-ok">Existing street is correct → Design</button></div>
       <div class="bhead" id="bhead">
         <button class="ghost small" id="btn-collapse">▾ Hide panel</button>
         <div class="opts" id="opt-chips"></div>
@@ -381,7 +403,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
       <div class="breview" id="breview" style="display:none"><div><b>Review.</b> Every block is verified and designed: the drawings show the whole proposal as designed, and the score below is for all of it.</div><div class="grow"></div><button class="ghost small" id="br-blocks" title="Back to the block tabs">← Back to blocks</button><button class="small" id="br-export" title="Download a report: the proposed plan and 3D view, the blocks, the score and statistics">Export summary ↓</button><button class="small primary" id="br-done">Done · back to map</button></div>
       <div class="bscore stats" id="bscore" style="display:none"></div>
       <div class="bcols" id="bcols">
-        <div class="sec"><h4>Option summary</h4><div class="prosCons" id="summary"></div>
+        <div class="sec"><h4>Design summary</h4><div class="prosCons" id="summary"></div>
           <div class="small muted" style="margin-top:10px">Edit the existing street (lanes, parking, bikeway, widths) in the <b>street panel</b> on the left (step 1 opens it; ◀ / ▶ fold it away and back).</div>
         </div>
         <div class="sec editor"><h4>Design the section <span class="small muted mono" id="ed-total"></span></h4>
@@ -397,7 +419,7 @@ header .sub{font-size:11.5px;color:var(--ink2)}
           <div id="props"></div>
           <div class="row" style="margin-top:8px"><span class="small muted" id="ed-remain"></span><div class="grow"></div><button class="small" id="btn-balance">Auto-balance</button></div>
         </div>
-        <div class="sec"><h4>Compliance</h4><div id="warnings"></div></div>
+        <div class="sec"><h4>Compliance</h4><div id="lts-panel"></div><div id="warnings"></div></div>
         <div class="sec"><h4>Recommendations</h4><div id="recs"></div></div>
       </div>
     </div>
@@ -410,7 +432,8 @@ header .sub{font-size:11.5px;color:var(--ink2)}
   <div class="form2"><label>Mapillary client token <span class="muted">— free: sign in at mapillary.com → Developers → Register application → copy the <i>Client Token</i></span></label><input id="set-mly" type="text" placeholder="MLY|…" spellcheck="false">
   <label>Google Maps Platform API key (optional) <span class="muted">— embeds the Street View panorama in the panel (Maps Embed API, free); without it the panel links to Street View</span></label><input id="set-gkey" type="text" placeholder="AIza…" spellcheck="false"></div>
   <div class="row" style="margin-top:14px;justify-content:flex-end;gap:8px"><button data-act="close">Cancel</button><button class="primary" data-act="saveset">Save</button></div></div></div>
-<div class="modal" id="method"><div class="box"><button class="ghost x" data-act="close">✕</button><h2>Bike score — methodology and references</h2>
+<div class="modal" id="method"><div class="box"><button class="ghost x" data-act="close">✕</button><h2>Bike score and cycling comfort — methodology and references</h2>
+  <p class="muted">Two measures, kept apart on purpose: the <b>bike score</b> follows the published Bike Score method and is not altered; the <b>cycling comfort</b> rating (Level of Traffic Stress, LTS) is reported beside it, block by block, from the published Level of Traffic Stress criteria. Neither feeds the other.</p>
   <p>The tool's bike score follows <b>Bike Score®</b>, the bikeability measure developed by Walk Score with Meghan Winters (SFU), Michael Brauer and Kay Teschke (UBC) — the tool listed on UBC's <i>Cycling in Cities</i> page — and validated against cycling behaviour in 24 Canadian and US cities (Winters et al. 2016). Bike Score rates a place 0–100 from four equally weighted parts: <b>bike lanes</b>, <b>hills</b>, <b>destinations and road connectivity</b>, and <b>bike-commute mode share</b>. The tool reproduces the first three on a 100 m grid over Vancouver and leaves out mode share, which is a census outcome a design cannot change, so each remaining part weighs one third.</p>
   <h3>1 · Bike lanes (one third)</h3><p>Bike Score sums nearby bikeway length with a distance decay (nothing beyond 1,000 m), counting paths at twice a painted lane and three times a shared route, and excludes sharrows. Here every bikeway in the City's layer (plus OpenStreetMap cycleways) is sampled every 25 m, weighted 3 for off-street paths and protected lanes, 1.5 for painted lanes, 1 for local-street bikeways and 0 for sharrows, and summed for each cell with a linear decay to zero at 1,000 m. Bike Score normalises "against an average of the highest scores"; the tool takes the mean of the top 2 % of cells as 100 and applies a square root, so the first lanes near a place count more than the tenth. <b>A proposal adds its blocks to this part at the weight of the separation chosen for each block — a protected lane 3, flex posts 2 (an interim protected lane), a painted buffer 1.5, a shared local street bikeway 1 — less anything already there; so the score responds to the design, and the change is what its statistics report.</b></p>
   <h3>2 · Hills (one third)</h3><p>Bike Score uses the steepest grade within 200 m, scoring 2 % as 100 and 10 % as 0. The tool computes grades from the City's 1 m contour lines on a 20 m grid (smoothed over 100 m, the grade a cyclist feels rather than a 20 m bump), takes the steepest within 200 m of each cell, and maps 2–10 % to 100–0. The proposal's own grades (average, steepest 20 m, metres over 5 %) are reported separately against the All Ages and Abilities (AAA) guidance of the BC Active Transportation Design Guide (keep under 3 %; 3–5 % acceptable for short lengths; over 5 % needs extra width).</p>
@@ -418,7 +441,26 @@ header .sub{font-size:11.5px;color:var(--ink2)}
   <h3>Score bands</h3><table><tr><th>Score</th><th>Bike Score band</th></tr><tr><td>90–100</td><td>Biker's Paradise — daily errands can be done by bike</td></tr><tr><td>70–89</td><td>Very Bikeable — cycling is convenient for most trips</td></tr><tr><td>50–69</td><td>Bikeable — some bike infrastructure</td></tr><tr><td>0–49</td><td>Somewhat Bikeable — minimal bike infrastructure</td></tr></table>
   <h3>What the tool reports for a proposal</h3><ul><li><b>Bike score around the proposal</b>: the mean over the grid cells within 400 m of its blocks, before (existing network) and after (with every proposal in the project), with the three parts.</li><li><b>Citywide</b>: the mean over all scored cells before and after, and how many cells gain a point or more.</li><li><b>Connectivity</b>: how many ends of the proposal meet the All Ages and Abilities (AAA) network, another facility, another block of the proposal, or nothing (a loose end).</li><li><b>Destinations</b>: places within 400 m (a two-minute ride) by category.</li><li><b>Grades</b> along the proposal, from the contour grid.</li></ul>
   <h3>Departures from Bike Score, stated plainly</h3><ul><li>Mode share is left out (three parts, not four).</li><li>Distances to amenities are straight-line; Bike Score / Walk Score use network distance.</li><li>Walk Score's walking thresholds are used unmodified for amenities, and the square-root lane scaling is the tool's choice; both are documented in <code>scripts/score.py</code> and can be changed there.</li><li>Cells with no street within 150 m (water, port, park interiors) carry no score.</li></ul>
+  <h3>Cycling comfort (Level of Traffic Stress) — who is comfortable riding each block</h3>
+  <p><b>Level of Traffic Stress</b> sorts a street into four levels by the stress motor traffic puts on a cyclist, each level matched to a share of the population (Geller's four types): <b>LTS 1</b> comfortable for children; <b>LTS 2</b> the mainstream adult population, "interested but concerned" — the All Ages and Abilities group, and the level the Dutch design standards are built to; <b>LTS 3</b> the "enthused and confident"; <b>LTS 4</b> the "strong and fearless" only. The criteria are lookup tables, not a formula, so a block's level can be checked by eye. The tool applies the original criteria of Mekuria, Furth and Nixon (2012), which need no traffic volumes (the City publishes none), with the speed thresholds converted from mph: up to 40 km/h = "up to 25 mph", 41–52 = "30 mph" (a 50 km/h street), 53–60 = "35 mph", over 60 = "40+ mph".</p>
+  <table><tr><th>Facility</th><th>Rule (the block takes the <b>worst</b> of its factors — the weakest link)</th></tr>
+  <tr><td>Physically separated lane or path (curb, posts, planters, barrier, raised lane, a parking lane between the bike lane and traffic; off-street paths)</td><td><b>LTS 1</b> between intersections (§III, "physically separated bikeways")</td></tr>
+  <tr><td>Painted lane, not beside parking (Table 3)</td><td>1 through lane per direction → 1; 2 per direction → 3 (a raised median between the directions would give 2, but medians are not in the data); 3 or more → 3. Lane under 1.8 m (6 ft, incl. a marked buffer) → at least 2. Speed up to 52 km/h → 1; 53–60 → 3; over 60 → 4.</td></tr>
+  <tr><td>Painted lane beside parking (Table 2)</td><td>2 or more through lanes per direction → 3. Reach (bike lane + buffer + parking lane) 4.6 m or more → 1; 4.3–4.5 m → 2 unless the street is residential or under 40 km/h; 4.1 m or less → 3. Speed up to 40 km/h → 1; 41–52 → 2; 53–60 → 3; over 60 → 4.</td></tr>
+  <tr><td>Mixed traffic — no facility, shared-lane markings, or a local street bikeway (Table 4)</td><td>Up to 40 km/h: 2–3 lanes → 1 on a residential street (no centreline), else 2; 4–5 lanes → 3; 6+ → 4. 41–52 km/h: 2–3 lanes → 2 residential, else 3; 4 or more → 4. Over 52 km/h → 4.</td></tr>
+  <tr><td>Crossing at either end (Table 7, unsignalised, no median refuge)</td><td>Crossing a street of up to 3 lanes at up to 52 km/h → 1; 4–5 lanes → 2; 6+ → 4. 53–60 km/h: 2 / 3 / 4. Over 60: 3 / 4 / 4. A signalised crossing is not a barrier. An RRFB or special crosswalk is not a signal. Medians are not in the data, so the no-refuge table is used — conservative, and the same before and after a proposal.</td></tr>
+  <tr><td>A bike lane is never rated worse than mixed traffic on the same street</td><td>Furth's LTS tables v2.2 (2022), note 4.</td></tr></table>
+  <p><b>No assumed inputs.</b> Each input is real data for the block or <i>unknown</i>; an unknown is enumerated over the values it can take here and the block gets a <b>range</b> (for example LTS 1–2), drawn dashed at its worse level and counted conservatively. Speed limit: OpenStreetMap <code>maxspeed</code> (5,208 blocks), the City's bikeways layer <code>speed_limit</code>, or the value you confirm on the design screen; else {30, 50} km/h, the posted limits in the city (40 and 60 appear only where OSM tags them). Note that the provincial default is 50 km/h unless posted and the City's 30 km/h local-street limit, approved July 2025, is being signed in phases — the tool does not assume either. Lane count: OpenStreetMap <code>lanes</code> (4,432 blocks; 95 % of arterial blocks) or your verified value; else {2, 4} two-way, {1, 2} one-way; on Residential-class streets the 2012 study's own surrogate applies (the authors used the residential class where lane data was missing, Table 4 note a). Lane width: a design's drawn width; an existing painted lane's width is not recorded, so {under 1.8 m, 1.8 m or more}. Parking beside the lane: from the design, from the subtype of an existing painted lane (buffer on the parking side), or from parking meters on the block; else both cases. Traffic volumes, bike-lane blockage, right-turn pocket lanes and raised medians are in no public dataset and are not used. <b>Verifying a block's existing street on the design screen (lanes, parking, speed limit) closes its range.</b></p>
+  <p><b>What the tool reports.</b> On the map, the <i>Cycling comfort</i> layer colours every street (LTS 1 green → LTS 4 dark red) and a proposal's blocks at the stress of their design; the legend carries the network line. Each proposal shows how many of its blocks are at LTS 1–2 after the design, how many were before, how many improved (and how many existing bikeways were upgraded), the worst block before → after, and the block-by-block list with the inputs behind each level. The project panel shows, for the whole city, the kilometres of low-stress street (LTS 1–2 over the whole range) and the number of existing bikeway blocks above LTS 2 that remain to be upgraded, before → with every visible proposal, so the network's progress is visible as proposals are added. A block counts as improved only when the worse end of its range drops; a block counts as low-stress only when its whole range is 1–2.</p>
+  <h3>Traffic signals</h3><p>The City's <i>traffic-signals</i> dataset (966 signals, updated August 2026) matched to the street nodes within 28 m: fixed-time, semi- and fully-actuated and bus-actuated signals; pedestrian-actuated signals; rapid-flashing beacons (RRFB) and special crosswalks, which are not signals. Shown as a map layer and on each block's card; a signalised crossing is not a barrier in the LTS criteria.</p>
+  <h3>Cyclist crashes</h3><p>Crashes involving a cyclist reported to ICBC, 2021–2025 (ICBC Reported Crashes, data as of 31 March 2026, ICBC Open Data Licence), filtered to the City of Vancouver: 4,455 crashes, 2,988 with injury or fatality. ICBC geocodes a crash to its intersection, or to the <i>middle of the block</i> for a mid-block crash, and only where the report gave enough location detail (92 % of Vancouver reports). The tool matches intersection crashes to the nearest street node within 40 m and mid-block crashes to the nearest block within 30 m (97 % matched). Crashes are an outcome, not a design input: they are shown beside the stress rating as evidence of where stress is doing harm, on the map, on the block card and in each proposal's statistics, and are not part of any score. ICBC's data is self-reported claims, so counts are higher than police data; locations are approximate.</p>
   <h3>References</h3><ul>
+  <li>Mekuria MC, Furth PG, Nixon H (2012). <i>Low-Stress Bicycling and Network Connectivity</i>. Mineta Transportation Institute report 11-19, San José State University. <a href="https://transweb.sjsu.edu/research/low-stress-bicycling-and-network-connectivity" target="_blank" rel="noopener">transweb.sjsu.edu</a> — Tables 2, 3, 4 and 7; §III on separated bikeways; §IV on the weakest-link rule.</li>
+  <li>Furth PG (2022). <i>Level of Traffic Stress Criteria for Road Segments</i>, version 2.2, and the <i>Level of Traffic Stress</i> page. <a href="https://peterfurth.sites.northeastern.edu/level-of-traffic-stress/" target="_blank" rel="noopener">peterfurth.sites.northeastern.edu</a> — note 4 (mixed-traffic floor); the level definitions.</li>
+  <li>Geller R (2006). <i>Four Types of Cyclists</i>. Portland Bureau of Transportation — the rider population each level is matched to.</li>
+  <li>City of Vancouver Open Data: <i>traffic-signals</i>, <i>bikeways</i> (speed_limit, AAA flags), <i>public-streets</i>, <i>parking-meters</i>. <a href="https://opendata.vancouver.ca/" target="_blank" rel="noopener">opendata.vancouver.ca</a>, Open Government Licence – Vancouver.</li>
+  <li>ICBC (2026). <i>ICBC Reported Crashes</i>, Tableau Public workbook, 2021–2025. <a href="https://public.tableau.com/app/profile/icbc/viz/ICBCReportedCrashes/ICBCReportedCrashes" target="_blank" rel="noopener">public.tableau.com/app/profile/icbc</a>; licence: <a href="https://www.icbc.com/policies/Pages/open-data-licence.aspx" target="_blank" rel="noopener">ICBC Open Data Licence</a>. Catalogue entry: <a href="https://catalogue.data.gov.bc.ca/dataset/icbc-reported-crashes" target="_blank" rel="noopener">BC Data Catalogue</a>.</li>
+  <li>City of Vancouver (2025). <i>30 km/h speed limits coming to local streets</i>, news release 9 July 2025 — the phased local-street limit the tool does not assume.</li>
   <li>Walk Score. <i>Bike Score Methodology</i>. <a href="https://www.walkscore.com/bike-score-methodology.shtml" target="_blank" rel="noopener">walkscore.com/bike-score-methodology.shtml</a>; <i>Walk Score Methodology</i>. <a href="https://www.walkscore.com/methodology.shtml" target="_blank" rel="noopener">walkscore.com/methodology.shtml</a></li>
   <li>Winters M, Teschke K, Brauer M, Fuller D (2016). Bike Score®: Associations between urban bikeability and cycling behavior in 24 cities. <i>International Journal of Behavioral Nutrition and Physical Activity</i> 13:18. <a href="https://doi.org/10.1186/s12966-016-0339-0" target="_blank" rel="noopener">doi:10.1186/s12966-016-0339-0</a></li>
   <li>Winters M, Brauer M, Setton EM, Teschke K (2013). Mapping bikeability: a spatial tool to support sustainable travel. <i>Environment and Planning B</i> 40(5):865–883 — the UBC bikeability index that preceded Bike Score.</li>

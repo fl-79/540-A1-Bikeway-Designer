@@ -162,15 +162,16 @@ const RULES = {
   parking: 2.5, curbLaneWithParking: 5.5, sidewalk: 3.6,
 };
 const SEP = {
-  posts:   {name:'Painted buffer + flex posts', prot:'Low',     cost:'$',   bufKind:'painted', h:0.0,  maxSpd:50, maxAadt:6000},
-  precast: {name:'Pre-cast concrete curb',      prot:'Medium',  cost:'$$',  bufKind:'raised',  h:0.15, maxSpd:60, maxAadt:1e9},
-  planter: {name:'Planter boxes on curb',       prot:'Medium',  cost:'$$',  bufKind:'planter', h:0.15, maxSpd:50, maxAadt:1e9},
-  extruded:{name:'Extruded concrete curb',      prot:'Medium-High', cost:'$$$', bufKind:'raised', h:0.15, maxSpd:80, maxAadt:1e9},
-  barrier: {name:'Concrete barrier',            prot:'High',    cost:'$$',  bufKind:'barrier', h:0.69, maxSpd:80, maxAadt:1e9},
-  shared:  {name:'Local street bikeway (shared, traffic-calmed)', prot:'Low', cost:'$', bufKind:'none', h:0, maxSpd:30, maxAadt:1500},
+  // v4: names in plain words (the technical term in brackets); `plain` is the short label on the design chips
+  posts:   {name:'Flex posts on a painted buffer', plain:'Flex posts', prot:'Low',     cost:'$',   bufKind:'painted', h:0.0,  maxSpd:50, maxAadt:6000},
+  precast: {name:'Bolted-down concrete curb (pre-cast)', plain:'Bolted curb', prot:'Medium',  cost:'$$',  bufKind:'raised',  h:0.15, maxSpd:60, maxAadt:1e9},
+  planter: {name:'Planter boxes on a curb', plain:'Planters', prot:'Medium',  cost:'$$',  bufKind:'planter', h:0.15, maxSpd:50, maxAadt:1e9},
+  extruded:{name:'Poured concrete curb (extruded)', plain:'Poured curb', prot:'Medium-High', cost:'$$$', bufKind:'raised', h:0.15, maxSpd:80, maxAadt:1e9},
+  barrier: {name:'Concrete barrier', plain:'Barrier', prot:'High',    cost:'$$',  bufKind:'barrier', h:0.69, maxSpd:80, maxAadt:1e9},
+  shared:  {name:'Shared quiet street (traffic-calmed, no separate lane)', plain:'Shared quiet street', prot:'Low', cost:'$', bufKind:'none', h:0, maxSpd:30, maxAadt:1500},
   // v2: the permanent end of the range, and a painted buffer with no posts (used to draw existing painted lanes)
-  raised:  {name:'Raised bike lane (concrete curb both sides)', prot:'High', cost:'$$$$', bufKind:'raisedlane', h:0.15, maxSpd:80, maxAadt:1e9, permanent:true},
-  paint:   {name:'Painted buffer (no physical separation)', prot:'None', cost:'$', bufKind:'paint', h:0.0, maxSpd:50, maxAadt:6000},
+  raised:  {name:'Raised lane at sidewalk level (concrete curb both sides)', plain:'Raised lane', prot:'High', cost:'$$$$', bufKind:'raisedlane', h:0.15, maxSpd:80, maxAadt:1e9, permanent:true},
+  paint:   {name:'Painted lane only (no physical separation)', plain:'Paint only', prot:'None', cost:'$', bufKind:'paint', h:0.0, maxSpd:50, maxAadt:6000},
 };
 // durability order used by the "make permanent" case (Rapid Implementation Guide Figure 32 protection levels and Tables 3–9 durability)
 const SEP_RANK = {paint:0, posts:1, planter:2, precast:3, extruded:4, barrier:5, raised:6};
@@ -304,8 +305,8 @@ function generateOptions(ctx) {
   if (opts.length<3 && cs.mode!=='review') {
     const absCtx={...ctx, absolute:true};
     const a=fitConfig(absCtx, ctx.dirMode==='free'?'one':ctx.dirMode, 'precast', twoSide);
-    if (a && opts.length<3) opts.push({id:'ABC'[opts.length], sep:'precast', mode:ctx.dirMode==='free'?'one':ctx.dirMode, twoSide, custom:false, els:a.els, tradeoffs:[...a.tradeoffs,'Uses absolute-minimum widths — requires City Engineer approval (Table 8-6 note 1, Table 8-10 note 4)'], lanes:a.lanes, park:a.park, absolute:true, title:'Absolute minimums · Pre-cast concrete curb'});
-    while (opts.length<3) opts.push({id:'ABC'[opts.length], sep:'shared', mode:'shared', twoSide, custom:false, els:beforeElements(ctx).map(e=>({...e})), tradeoffs:['No road-space reallocation — relies on 30 km/h and traffic calming (diverters, speed humps)'], lanes:ctx.lanes, park:ctx.park, title:'Local street bikeway (shared, traffic-calmed)'});
+    if (a && opts.length<3) opts.push({id:'ABC'[opts.length], sep:'precast', mode:ctx.dirMode==='free'?'one':ctx.dirMode, twoSide, custom:false, els:a.els, tradeoffs:[...a.tradeoffs,'Uses absolute-minimum widths — requires City Engineer approval (Table 8-6 note 1, Table 8-10 note 4)'], lanes:a.lanes, park:a.park, absolute:true, title:'Absolute minimums · Bolted-down concrete curb (pre-cast)'});
+    while (opts.length<3) opts.push({id:'ABC'[opts.length], sep:'shared', mode:'shared', twoSide, custom:false, els:beforeElements(ctx).map(e=>({...e})), tradeoffs:['No road-space reallocation — relies on 30 km/h and traffic calming (diverters, speed humps)'], lanes:ctx.lanes, park:ctx.park, title:'Shared quiet street (traffic-calmed, no separate lane)'});
   }
   // v2: on a structure (bridge, viaduct, overpass) no sidewalk is added — the deck's existing sidewalk is kept as it is and only noted
   if (lvlOf(ctx.seg)>0) opts.forEach(o=>o.els.forEach(e=>{ if(e.k==='sw'){ e.existing=true; e.lock=true; } }));
